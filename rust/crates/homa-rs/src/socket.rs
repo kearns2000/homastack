@@ -311,22 +311,33 @@ impl HomaSocket {
     /// kernel abandoned the RPC (`ETIMEDOUT`, `ENOTCONN` when no server
     /// listens on the port, `EHOSTUNREACH`, ...).
     ///
-    /// A signal interrupting the wait (`EINTR`) does **not** end the RPC in
-    /// the kernel and a private response is never delivered through
-    /// [`HomaSocket::recv`], so this retries transparently. If the wait fails
-    /// for any other reason that leaves the RPC alive, it is aborted before
-    /// the error is returned so no response is orphaned in the receive pool.
+    /// A signal interrupting the wait (`EINTR`), and a spurious `EAGAIN`,
+    /// do **not** end the RPC in the kernel and a private response is never
+    /// delivered through [`HomaSocket::recv`], so both are retried. `EAGAIN`
+    /// is not expected on a blocking wait (the pinned kernel returns it only
+    /// for `MSG_DONTWAIT`); retrying it, with a short back-off, keeps a
+    /// sticky `EAGAIN` from aborting a live RPC or spinning a core. If the
+    /// wait fails for another reason that leaves the RPC alive *and* this
+    /// thread was the waiter, it is aborted before the error is returned.
     ///
-    /// Only one thread may wait on a given private id at a time; the kernel
-    /// fails a concurrent second waiter with `EINVAL`.
+    /// Only one thread may wait on a given private id at a time. The kernel
+    /// fails a concurrent second waiter with `EINVAL` and does not end the
+    /// RPC; this method returns that error **without** aborting, so the
+    /// first waiter's response is not cancelled. The same applies to an even
+    /// id that was not sent as a private request.
     pub fn recv_response(&self, id: RpcId) -> Result<Message> {
         Self::check_private_id(id)?;
+        let mut backoff = Duration::from_micros(20);
         loop {
             match self.recv_raw(id.as_raw(), 0) {
-                Err(e) if e.kind() == ErrorKind::Interrupted => {
-                    trace!(%id, "private wait interrupted; retrying");
+                Err(e) if matches!(e.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) => {
+                    trace!(%id, kind = ?e.kind(), "private wait not finished; retrying");
+                    if e.kind() == ErrorKind::WouldBlock {
+                        std::thread::sleep(backoff);
+                        backoff = (backoff * 2).min(Duration::from_millis(1));
+                    }
                 }
-                Err(e) => return Err(self.abort_after_failed_wait(id, e)),
+                Err(e) => return Err(self.finish_failed_private_wait(id, e)),
                 Ok(msg) => {
                     debug_assert_eq!(msg.id, id);
                     return Ok(msg);
@@ -362,7 +373,7 @@ impl HomaSocket {
                 Err(e) if e.kind() == ErrorKind::Interrupted => {
                     trace!(%id, "private wait interrupted; retrying");
                 }
-                Err(e) => return Err(self.abort_after_failed_wait(id, e)),
+                Err(e) => return Err(self.finish_failed_private_wait(id, e)),
                 Ok(msg) => {
                     debug_assert_eq!(msg.id, id);
                     return Ok(msg);
@@ -387,16 +398,10 @@ impl HomaSocket {
     }
 
     /// A private wait ended with `err` and the caller is giving up on `id`.
-    /// If the kernel may still hold the RPC, abort it so a late response does
-    /// not sit in the receive pool until Homa's own timeout.
-    ///
-    /// Nothing to do for [`HomaError::RpcFailed`] (the kernel ran
-    /// `homa_rpc_end` before returning the error) or for a shutdown socket
-    /// (`homa_sock_shutdown` ends every RPC).
-    fn abort_after_failed_wait(&self, id: RpcId, err: HomaError) -> HomaError {
-        let kernel_ended_it =
-            matches!(err, HomaError::RpcFailed { .. }) || err.kind() == ErrorKind::Shutdown;
-        if !kernel_ended_it {
+    /// Abort only when [`HomaError::private_wait_should_abort`] says this
+    /// thread may still own a live RPC.
+    fn finish_failed_private_wait(&self, id: RpcId, err: HomaError) -> HomaError {
+        if err.private_wait_should_abort() {
             self.abort_quietly(id, "failed wait");
         }
         err

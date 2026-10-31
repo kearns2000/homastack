@@ -7,7 +7,8 @@
 
 These tests exercise the real Linux Homa kernel module over loopback. They are
 never mocked. The test code lives in
-`rust/crates/homa-rs/tests/kernel_integration.rs` and every test is marked
+`rust/crates/homa-rs/tests/kernel_integration.rs` and
+`rust/crates/homa-ffi/tests/ffi_kernel.rs`. Every test is marked
 `#[ignore]` so that an ordinary `cargo test` does not fail where Homa is
 absent.
 
@@ -15,7 +16,7 @@ absent.
 
 - Linux host with `homa.ko` loaded (see `docs/linux-setup.md`), ideally built
   from the pinned revision `4bd0275714439da2955670a6c438f6c23304d785`.
-- Homa ports 7400-7499 free.
+- Homa ports 7400-7599 free (7400-7499 for `homa-rs`, 7500-7599 for `homa-ffi`).
 - About 1.5 GB of address space headroom: each test socket maps a 64 MiB region
   (only touched pages are backed).
 - `cc` and Linux UAPI headers for the header check.
@@ -32,7 +33,9 @@ Manual equivalent:
 ```bash
 cd rust
 cargo test -p homa-sys --features header-check
+cargo test -p homa-ffi --features header-check
 cargo test -p homa-rs --test kernel_integration -- --ignored --test-threads=1 --nocapture
+cargo test -p homa-ffi --test ffi_kernel -- --ignored --test-threads=1 --nocapture
 ```
 
 `--test-threads=1` keeps the per-test echo servers from competing for CPU and
@@ -53,6 +56,22 @@ parallel.
 | 5b | `request_to_unreachable_host_times_out` | unreachable IP → timeout/unreachable; family mismatch rejected locally |
 | 6 | `recv_timeout_and_shutdown_unblock` | `recv_timeout`, `try_recv`, `poll_readable`, `shutdown` wakes a blocked `recv` with `ESHUTDOWN` |
 | 7 | `resources_are_released_after_failures` | `EADDRINUSE`, port reuse after drop, drop with pending bpages, too-small region rejected with kernel `error_msg`, subsequent sockets work |
+| F1 | `homa-ffi` `small_request_through_c_abi` | C ABI `homa_request` against an FFI-backed echo server |
+| F2 | `homa-ffi` `binary_payload_with_nuls` | NUL bytes through the C ABI |
+| F3 | `homa-ffi` `large_payload_and_repeated_alloc_free` | 1 B .. 200 KiB, message free each time |
+| F4 | `homa-ffi` `sequential_private_send_recv` | 20 private send+recv, cookie and even ids |
+| F5 | `homa-ffi` `concurrent_requests_on_one_socket` | 8 threads, one client handle |
+| F6 | `homa-ffi` `rust_server_serves_ffi_client` | `homa-rs` server, C ABI client |
+| F7 | `homa-ffi` `timeout_aborts_and_shutdown_unblocks` | request timeout / no-server; `homa_recv` woken by shutdown |
+| F8 | `homa-ffi` `close_invalidates_handle_and_abort_unknown_id` | close, double-close, abort of unknown id |
+| F1 | `homa-ffi` `small_request_through_c_abi` | C ABI `homa_request` against an FFI-backed echo server |
+| F2 | `homa-ffi` `binary_payload_with_nuls` | NUL bytes through the C ABI |
+| F3 | `homa-ffi` `large_payload_and_repeated_alloc_free` | 1 B .. 200 KiB, message free each time |
+| F4 | `homa-ffi` `sequential_private_send_recv` | 20 private send+recv, cookie and even ids |
+| F5 | `homa-ffi` `concurrent_requests_on_one_socket` | 8 threads, one client handle |
+| F6 | `homa-ffi` `rust_server_serves_ffi_client` | `homa-rs` server, C ABI client |
+| F7 | `homa-ffi` `timeout_aborts_and_shutdown_unblocks` | request timeout / no-server; `homa_recv` woken by shutdown |
+| F8 | `homa-ffi` `close_invalidates_handle_and_abort_unknown_id` | close, double-close, abort of unknown id |
 
 ## Results log
 

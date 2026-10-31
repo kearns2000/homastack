@@ -84,7 +84,7 @@ echo "4. Native build dependencies"
 if command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then
   ok "C compiler available ($(cc --version 2>/dev/null | head -1 || echo cc))"
 else
-  warn "no C compiler (cc/gcc/clang): needed for the optional 'header-check' test and for building HomaModule"
+  warn "no C compiler (cc/gcc/clang): needed for the optional header-check tests, the C ffi-client and for building HomaModule"
 fi
 if [[ "$OS" == "Linux" ]]; then
   if [[ -f /usr/include/linux/types.h ]]; then
@@ -92,8 +92,8 @@ if [[ "$OS" == "Linux" ]]; then
   else
     warn "Linux UAPI headers missing (linux-libc-dev / kernel-headers): needed for the 'header-check' test"
   fi
-  for t in make; do
-    command -v "$t" >/dev/null 2>&1 && ok "$t available" || warn "$t missing (needed to build HomaModule)"
+  for t in make cmake; do
+    command -v "$t" >/dev/null 2>&1 && ok "$t available" || warn "$t missing (make: HomaModule; cmake: rust/examples/ffi-client)"
   done
 fi
 
@@ -152,6 +152,7 @@ if [[ $BUILD_OK -eq 0 ]]; then
 elif [[ $HOMA_OK -eq 1 ]]; then
   echo "RESULT: Homa sockets are usable. Run the echo server/client and the integration tests:"
   echo "  cd rust && cargo test -p homa-rs --test kernel_integration -- --ignored --test-threads=1"
+  echo "  cd rust && cargo test -p homa-ffi --test ffi_kernel -- --ignored --test-threads=1"
   exit 0
 else
   echo "RESULT: build + unit tests only. Homa sockets are not usable on this machine."

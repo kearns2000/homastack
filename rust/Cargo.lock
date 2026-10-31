@@ -189,6 +189,8 @@ name = "homa-ffi"
 version = "0.1.0"
 dependencies = [
  "homa-rs",
+ "homa-sys",
+ "libc",
 ]
 
 [[package]]

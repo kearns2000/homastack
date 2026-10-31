@@ -1,18 +1,33 @@
 [package]
 name = "homa-ffi"
-description = "Stable C ABI over homa-rs for Homa.NET (Phase 2 placeholder)"
+description = "Stable, versioned C ABI over homa-rs (libhoma_ffi.so) for Homa.NET and other native hosts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
 authors.workspace = true
+links = "homa_ffi"
 
 [lib]
+# rlib: in-process Rust hosts and the test suite.
+# cdylib: libhoma_ffi.so / .dylib for C, C++ and .NET LibraryImport.
+# staticlib: libhoma_ffi.a for static linking into native executables.
 crate-type = ["rlib", "cdylib", "staticlib"]
+
+[features]
+default = []
+# Compiles include/homa_ffi.h with the system C compiler and compares
+# sizes, offsets and constants against the Rust #[repr(C)] types.
+header-check = []
 
 [dependencies]
 homa-rs = { workspace = true }
+homa-sys = { workspace = true }
+
+[dev-dependencies]
+libc = { workspace = true }
 
 [lints]
 workspace = true
+

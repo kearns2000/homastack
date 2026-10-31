@@ -216,6 +216,30 @@ impl HomaError {
     pub fn is_recoverable(&self) -> bool {
         !matches!(self.kind(), ErrorKind::Shutdown | ErrorKind::Unavailable)
     }
+
+    /// Whether a failed private `recvmsg` should be followed by `HOMAIOCABORT`.
+    ///
+    /// Abort only when this thread may have been the waiter and the kernel
+    /// left the RPC alive. Do **not** abort when:
+    /// * the kernel already ended the RPC ([`HomaError::RpcFailed`], shutdown);
+    /// * the wait was rejected before this thread became the waiter
+    ///   (`EINVAL` / [`ErrorKind::InvalidInput`]: a second waiter, or an id
+    ///   that is not a private client RPC). Aborting there would cancel the
+    ///   other thread's RPC or a shared response;
+    /// * the result is `EAGAIN` or `EINTR`, which leave the RPC alive and are
+    ///   retried by the socket layer.
+    #[must_use]
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub(crate) fn private_wait_should_abort(&self) -> bool {
+        !matches!(self, Self::RpcFailed { .. })
+            && !matches!(
+                self.kind(),
+                ErrorKind::Shutdown
+                    | ErrorKind::InvalidInput
+                    | ErrorKind::WouldBlock
+                    | ErrorKind::Interrupted
+            )
+    }
 }
 
 /// Map a Linux `errno` to an [`ErrorKind`].
@@ -323,6 +347,26 @@ mod tests {
         assert!(err.to_string().contains("homa: invalid msg_controllen"));
         let err = err.with_detail(Some("second".into()));
         assert!(!err.to_string().contains("second"));
+    }
+
+    #[test]
+    fn private_wait_abort_policy() {
+        let os = |errno| HomaError::os("recvmsg", io::Error::from_raw_os_error(errno));
+        assert!(!os(libc::EINVAL).private_wait_should_abort());
+        assert!(!os(libc::EAGAIN).private_wait_should_abort());
+        assert!(!os(libc::EINTR).private_wait_should_abort());
+        assert!(!os(libc::ESHUTDOWN).private_wait_should_abort());
+        assert!(os(libc::EIO).private_wait_should_abort());
+        assert!(
+            !HomaError::RpcFailed {
+                id: RpcId::from_raw(2),
+                completion_cookie: 0,
+                source: io::Error::from_raw_os_error(libc::ETIMEDOUT),
+                detail: None,
+            }
+            .private_wait_should_abort()
+        );
+        assert!(!HomaError::InvalidRpcId(RpcId::from_raw(1)).private_wait_should_abort());
     }
 
     #[test]

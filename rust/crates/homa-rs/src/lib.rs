@@ -56,7 +56,9 @@
 //! [`HomaSocket::recv`] while another calls [`HomaSocket::request`]). One
 //! restriction comes from the kernel: **at most one thread may wait on a
 //! given private RPC id at a time** (`homa_interest_init_private` fails a
-//! second waiter with `EINVAL`). Different ids, and any number of shared
+//! second waiter with `EINVAL` and does not end that RPC; this crate returns
+//! the error without aborting, so the first waiter's response is not
+//! cancelled). Different ids, and any number of shared
 //! receivers, may be waited on concurrently. There is no async runtime. The non-blocking primitives ([`HomaSocket::try_recv`],
 //! [`HomaSocket::poll_readable`]) and the fd-based design are the hooks a
 //! future async layer would build on without changing these types.

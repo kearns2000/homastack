@@ -1,4 +1,4 @@
-# Native interop: the kernel ABI and the planned C ABI
+# Native interop: the kernel ABI and the C ABI
 
 ## Part A - Kernel interface used by `homa-sys` (desk-checked against upstream source)
 
@@ -75,61 +75,139 @@ auto-assigned port for requests, server port for responses).
 - Behaviour of `bind` after traffic has flowed is documented upstream as
   "should not be done"; `homa-rs` only binds at creation.
 
-## Part B - Planned stable C ABI (`homa-ffi`, Phase 2)
+## Part B - Stable C ABI (`homa-ffi`, Phase 2, ABI version 1)
 
-Design goals: flat, versioned, no Rust types across the boundary, no callbacks
-in v1, every allocation owned by one side with an explicit free.
+Implemented. Source of truth: `rust/crates/homa-ffi/include/homa_ffi.h` and
+the `#[repr(C)]` types in `rust/crates/homa-ffi/src/types.rs`. The header is
+hand-written (same approach as `homa-sys` vs `homa.h`);
+`cargo test -p homa-ffi --features header-check` compiles it as C11 and
+compares every size, offset and constant. A Linux `cdylib` exports only the
+`homa_*` symbols (`homa_ffi.map`).
+
+This layer is synchronous. It does not implement the Homa wire protocol. Every
+socket call is forwarded to `homa_rs::HomaSocket`.
+
+### Versioning
+
+| Item | Rule |
+|------|------|
+| `homa_ffi_abi_version()` | `1` for this interface. Callers must check it. |
+| Breaking change | bump the integer, keep old symbols only if they still work, document the migration. |
+| Compatible addition | new function symbol, or new fields appended to a struct after a larger `struct_size`. Older callers keep working. |
+| Unsupported version | a future library that cannot serve ABI 1 should still return the new number; the caller refuses to proceed. |
+
+ABI 1 is the first published interface. The two query symbols
+(`homa_ffi_abi_version`, `homa_ffi_platform_supported`) were sketched as a
+Phase 1 placeholder that returned `0`; this tree ships them as part of ABI 1
+and does not keep a separate ABI-0 library.
+
+### Status codes
+
+`homa_status_t` is `int32_t`. `HOMA_OK = 0`. The other values (`1`..`17`,
+`99`) are listed in the header and will not be reused. Last-error state is
+thread-local: status, `errno`, UTF-8 message. `homa_last_error_message`
+copies into a caller buffer and reports the required length (including NUL).
+Successful calls do not clear the record; `homa_clear_last_error` does.
+A Rust panic is caught at the boundary and becomes `HOMA_ERR_INTERNAL`.
+
+### Exported functions
 
 ```c
-// Proposed surface (not implemented in Phase 1)
-uint32_t homa_ffi_abi_version(void);               // implemented (returns 0)
-bool     homa_ffi_platform_supported(void);        // implemented
+uint32_t      homa_ffi_abi_version(void);
+bool          homa_ffi_platform_supported(void);
+uint32_t      homa_ffi_max_message_length(void);
+const char   *homa_status_name(homa_status_t);
 
-typedef struct homa_socket homa_socket_t;          // opaque
+homa_status_t homa_last_error_message(char *buf, uint64_t buf_len, uint64_t *required_len);
+homa_status_t homa_last_error_status(void);
+int32_t       homa_last_error_errno(void);
+void          homa_clear_last_error(void);
 
-int32_t homa_socket_open(uint16_t family, uint16_t bind_port,
-                         uint64_t region_bytes, homa_socket_t **out);
-void    homa_socket_close(homa_socket_t *s);
-int32_t homa_socket_shutdown(homa_socket_t *s);
-uint16_t homa_socket_port(const homa_socket_t *s);
+homa_status_t homa_socket_open(const homa_socket_options_t *options, homa_socket_t **out);
+homa_status_t homa_socket_bind(const homa_socket_options_t *options, uint16_t port, homa_socket_t **out);
+homa_status_t homa_socket_close(homa_socket_t *socket);
+homa_status_t homa_socket_shutdown(homa_socket_t *socket);
+homa_status_t homa_socket_local_port(const homa_socket_t *socket, uint16_t *out_port);
+homa_status_t homa_socket_info(const homa_socket_t *socket, homa_socket_info_t *info);
 
-// Requests
-int32_t homa_send_request(homa_socket_t *s, const uint8_t *addr, uint32_t addr_len,
-                          const uint8_t *payload, uint32_t len,
-                          uint64_t cookie, uint32_t flags, uint64_t *rpc_id);
-int32_t homa_recv_response(homa_socket_t *s, uint64_t rpc_id, int32_t timeout_ms,
-                           homa_message_t **msg);
-// Shared receive + reply
-int32_t homa_recv(homa_socket_t *s, int32_t timeout_ms, homa_message_t **msg);
-int32_t homa_reply(homa_socket_t *s, uint64_t rpc_id, const uint8_t *addr,
-                   uint32_t addr_len, const uint8_t *payload, uint32_t len);
+homa_status_t homa_send_request(homa_socket_t *, const homa_endpoint_t *,
+                                const uint8_t *payload, uint64_t len,
+                                uint64_t cookie, uint32_t flags, uint64_t *rpc_id);
+homa_status_t homa_recv_response(homa_socket_t *, uint64_t rpc_id, int64_t timeout_ms,
+                                 homa_message_t **out);
+homa_status_t homa_request(homa_socket_t *, const homa_endpoint_t *,
+                           const uint8_t *payload, uint64_t len, int64_t timeout_ms,
+                           homa_message_t **out);
+homa_status_t homa_recv(homa_socket_t *, int64_t timeout_ms, homa_message_t **out);
+homa_status_t homa_reply(homa_socket_t *, uint64_t rpc_id, const homa_endpoint_t *,
+                         const uint8_t *payload, uint64_t len);
+homa_status_t homa_reply_to_message(homa_socket_t *, const homa_message_t *,
+                                    const uint8_t *payload, uint64_t len);
+homa_status_t homa_abort_rpc(homa_socket_t *, uint64_t rpc_id);
 
-// Messages (owned by native side; free exactly once)
-const uint8_t *homa_message_data(const homa_message_t *m, uint32_t *len);
-uint64_t homa_message_id(const homa_message_t *m);
-uint64_t homa_message_cookie(const homa_message_t *m);
-int32_t  homa_message_peer(const homa_message_t *m, uint8_t *addr, uint32_t *addr_len);
-void     homa_message_free(homa_message_t *m);
-
-// Errors: negative errno-style codes; details via thread-local last error.
-int32_t homa_last_error_message(char *buf, uint32_t len);
+homa_status_t homa_message_info(const homa_message_t *, homa_message_info_t *);
+const uint8_t *homa_message_payload(const homa_message_t *, uint64_t *len);
+void          homa_message_free(homa_message_t *);
 ```
 
-.NET side (`Homa.NET`, Phase 3; `Homa.Rpc`/`Homa.Rpc.Hosting` follow in
-Phase 4):
+`homa_endpoint_t` carries family (`4`/`6`), host-order port, IPv6 scope id
+and 16 network-order address bytes. Timeouts: `timeout_ms < 0` blocks;
+`0` is a single non-blocking attempt; `> 0` is a deadline in milliseconds.
+Private-response expiry **aborts** the RPC. Shared-receive expiry does not.
 
-- `LibraryImport` (source-generated P/Invoke) with `SafeHandle` subclasses for
-  `homa_socket_t` and `homa_message_t`; `Message.Span` exposes the native bytes
-  until disposal, or copies into a `byte[]`/`Memory<byte>` for the simple API.
-- `HomaSocket` (sync) mirrors `homa-rs`; `HomaClient` adds `Task`-based
-  `RequestAsync` by running the blocking receive on a dedicated thread per
-  socket (Phase 3) and later on a native poller once async lands in Rust.
-- Errors map to `HomaException { ErrorKind, Errno, Detail }` with the same
-  classification as `homa_rs::ErrorKind`.
-- Packaging: `runtimes/linux-x64/native/libhoma_ffi.so` and
-  `linux-arm64`; non-Linux RIDs ship no native asset and
-  `homa_ffi_platform_supported` guards usage.
+### Ownership
 
-Open questions for Phase 2: whether to expose zero-copy message views (needs a
-zero-copy `homa-rs` first), how to surface `HOMAIOCINFO` for diagnostics, and
-cancellation semantics (abort vs. let the kernel time out).
+- `homa_socket_t *` is a generation-checked registry key. Close with
+  `homa_socket_close`. Use after close returns `HOMA_ERR_INVALID_ARGUMENT`
+  and cannot use-after-free. Concurrent close wakes in-flight receives with
+  `HOMA_ERR_SHUTDOWN`.
+- `homa_message_t *` owns a `Vec<u8>` copied out of the kernel region. The
+  payload pointer is valid until `homa_message_free`. Free exactly once; do
+  not pass it to `free(3)`. Double-free is undefined, same class as `free(3)`.
+- Not zero-copy.
+
+### Threading
+
+A handle is usable from many threads. The kernel still allows only one waiter
+per private RPC id. Several threads may call `homa_recv`; each shared message
+goes to exactly one. Last-error state is per-thread.
+
+### Build and link
+
+```bash
+cd rust
+cargo build --release -p homa-ffi
+# Linux: target/release/libhoma_ffi.so
+# headers: crates/homa-ffi/include/homa_ffi.h
+```
+
+C example: `rust/examples/ffi-client` (CMake, C11, links only `libhoma_ffi`
+and `homa_ffi.h`). Supported runtime architectures: Linux x86_64 and
+aarch64. The crate compiles on macOS so the ABI tests run there;
+`homa_socket_open` then returns `HOMA_ERR_UNSUPPORTED_PLATFORM`.
+
+### Planned .NET 10 mapping (Phase 3, not implemented)
+
+| C | .NET `LibraryImport` |
+|---|---|
+| `homa_socket_t *` | `SafeHandle` subclass (`HomaSocketHandle`) |
+| `homa_message_t *` | `SafeHandle` subclass (`HomaMessageHandle`); `DangerousGetHandle` only inside the wrapper |
+| `homa_status_t` / `int32_t` | `int` |
+| `uint64_t` (RPC id, cookie, lengths) | `ulong` |
+| `uint16_t` (port, family) | `ushort` |
+| `const uint8_t *` + `uint64_t len` | `ReadOnlySpan<byte>` (source-generated marshalling) or `byte*` + `nuint` |
+| `homa_endpoint_t` (24 bytes, blittable) | `readonly struct` with `LayoutKind.Sequential` |
+| `homa_message_info_t` | sequential struct; `payload` becomes `byte*` then `ReadOnlySpan<byte>` of `payload_len` |
+| `bool` (`homa_ffi_platform_supported`) | `[return: MarshalAs(UnmanagedType.U1)] bool` |
+| `const char *` (`homa_status_name`) | `byte*` / `Marshal.PtrToStringUTF8` (static, never freed) |
+| `homa_last_error_message` | `Span<byte>` plus `out ulong required` |
+| timeouts | `int` milliseconds; `-1` = infinite. Future `ValueTask` wrappers run the blocking call on a dedicated thread per socket. |
+
+Packaging: `runtimes/linux-x64/native/libhoma_ffi.so` and `linux-arm64`.
+Non-Linux RIDs ship no native asset; `homa_ffi_platform_supported` guards
+usage. No reflection-based marshalling is required: every public type is
+blittable or a pointer plus length.
+
+Open questions deferred to Phase 3: zero-copy views (needs a zero-copy
+`homa-rs` first), richer `HOMAIOCINFO` surface, and whether cancellation
+should abort or let the kernel time out.

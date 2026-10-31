@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/kearns2000/homastack/actions/workflows/rust-ci.yml"><img src="https://github.com/kearns2000/homastack/actions/workflows/rust-ci.yml/badge.svg?branch=main" alt="rust-ci"></a>
   <a href="https://github.com/kearns2000/homastack/actions/workflows/dotnet-ci.yml"><img src="https://github.com/kearns2000/homastack/actions/workflows/dotnet-ci.yml/badge.svg?branch=main" alt="dotnet-ci"></a>
-  <img src="https://img.shields.io/badge/status-Phase%201%20PoC-orange" alt="Status: Phase 1 proof of concept">
+  <img src="https://img.shields.io/badge/status-Phase%202%20C%20ABI-0ea5e9" alt="Status: Phase 2 C ABI">
   <br>
   <img src="https://img.shields.io/badge/rust-1.85%2B%20%7C%20edition%202024-000000?logo=rust" alt="Rust 1.85+, edition 2024">
   <img src="https://img.shields.io/badge/.NET-10%20%28planned%29-512BD4?logo=dotnet&logoColor=white" alt=".NET 10 planned">
@@ -28,7 +28,7 @@ make it usable from Rust and .NET through a layered design:
 | Raw bindings | `rust/crates/homa-sys` | **Phase 1 - implemented** |
 | Safe Rust API | `rust/crates/homa-rs` | **Phase 1 - implemented** |
 | Examples | `rust/examples/echo-server`, `echo-client` | **Phase 1 - implemented** |
-| Stable C ABI | `rust/crates/homa-ffi` | placeholder (Phase 2) |
+| Stable C ABI | `rust/crates/homa-ffi` (`libhoma_ffi.so`) | **Phase 2 - implemented** |
 | Managed wrapper | `dotnet/src/Homa.NET` | planned (Phase 3) |
 | RPC framework | `dotnet/src/Homa.Rpc`, `Homa.Rpc.Hosting` | planned (Phase 4) |
 | Userspace Homa in Rust | - | possible future work |
@@ -82,7 +82,7 @@ flowchart TB
         app["echo-client / echo-server<br/>(or any application)"]
         rs["homa-rs<br/>HomaSocket · Message · RpcId<br/>buffer pool ownership · errno mapping"]
         sys["homa-sys<br/>repr(C) ABI mirrors · syscall wrappers · mmap region"]
-        ffi["homa-ffi (Phase 2)<br/>stable extern #quot;C#quot; surface"]
+        ffi["homa-ffi (Phase 2, implemented)<br/>libhoma_ffi.so · homa_ffi.h"]
         net["Homa.NET / Homa.Rpc (Phase 3-4)<br/>.NET 10, LibraryImport"]
         app --> rs --> sys
         net -. P/Invoke .-> ffi --> rs
@@ -107,6 +107,9 @@ Responsibility split:
   tracking which bpages the application owns and handing them back, validating
   fragment descriptors, reassembling payloads, decoding peer addresses, timeouts
   on top of `MSG_DONTWAIT`/`poll`, and error translation.
+- **C ABI (`homa-ffi`)** - a versioned `extern "C"` adapter over `homa-rs`.
+  It does not talk to the kernel itself. C, C++ and (in Phase 3) .NET consume
+  `libhoma_ffi.so` through `include/homa_ffi.h`.
 
 More detail in [docs/architecture.md](docs/architecture.md) and
 [docs/native-interop.md](docs/native-interop.md).
@@ -123,14 +126,21 @@ cargo test --workspace             # unit tests + doctests, no Homa needed
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 cargo doc --workspace --no-deps
+cargo build --release -p homa-ffi  # libhoma_ffi.so / .dylib / .a
 ```
 
-On Linux you can additionally verify the hand-written ABI against the vendored
-header with the system C compiler:
+On Linux you can additionally verify the hand-written ABIs against their C
+headers with the system C compiler:
 
 ```bash
 cargo test -p homa-sys --features header-check
+cargo test -p homa-ffi --features header-check
 ```
+
+The native library name is `homa_ffi` (`libhoma_ffi.so` on Linux,
+`libhoma_ffi.dylib` on macOS). Only the `homa_*` symbols listed in
+`homa_ffi.h` are exported (Linux version script / macOS exported-symbols
+list). There is no .NET runtime dependency.
 
 ## Setting up a compatible Linux environment
 
@@ -165,14 +175,28 @@ Set `RUST_LOG=debug` (or `trace`) for per-message logs. The client exits
 non-zero if any response does not match the request. Reported latency is the
 user-space round trip (two system calls plus copies), not wire latency.
 
+The C smoke-test client (`rust/examples/ffi-client`) talks to the same
+echo server through `libhoma_ffi.so` and `homa_ffi.h` only:
+
+```bash
+cd rust
+cargo build --release -p homa-ffi
+cmake -S examples/ffi-client -B /tmp/ffi-client-build
+cmake --build /tmp/ffi-client-build
+/tmp/ffi-client-build/ffi-client --server 127.0.0.1 --port 5000 --payload "Hello Homa"
+```
+
+
 ## Tests
 
 | Command | Needs Homa? | What it covers |
 |---------|-------------|----------------|
-| `cargo test --workspace` | no | ABI sizes/offsets/ioctl numbers, address conversion, errno translation, fragment layout validation, multi-page reassembly, bpage queue batching, payload rules, latency stats |
+| `cargo test --workspace` | no | ABI sizes/offsets/ioctl numbers, address conversion, errno translation, fragment layout validation, multi-page reassembly, bpage queue batching, payload rules, latency stats, C ABI version/platform/null-arg/error/panic tests |
 | `cargo test -p homa-sys --features header-check` | no (Linux + `cc`) | compiles the vendored `homa.h` and compares every size/offset/constant with the Rust definitions |
+| `cargo test -p homa-ffi --features header-check` | no (`cc`) | compiles `homa_ffi.h` as C11 and compares sizes, offsets and constants with the Rust `#[repr(C)]` types |
 | `cargo test -p homa-rs --test kernel_integration -- --ignored --test-threads=1` | **yes** | small RPC, binary payload with NULs, 300 KB / 1 MB multi-page payloads, 200 sequential requests with buffer recycling, completion cookies & shared vs private responses, concurrent requests, no-server and unreachable destinations, receive timeout and shutdown wake-up, cleanup after failures |
-| `scripts/run-integration.sh` | **yes** | runs both of the above and writes a log under `tests/integration/results/` |
+| `cargo test -p homa-ffi --test ffi_kernel -- --ignored --test-threads=1` | **yes** | C ABI against a live module: request/reply, NULs, large payloads, sequential and concurrent RPCs, Rust server + FFI client, timeout/shutdown, handle close |
+| `scripts/run-integration.sh` | **yes** | runs the header checks and both ignored kernel suites and writes a log under `tests/integration/results/` |
 
 Integration tests are `#[ignore]`d so `cargo test` never fails just because
 Homa is absent, and they are never mocked.
@@ -210,11 +234,23 @@ Homa is absent, and they are never mocked.
 - **HomaStack's own licence has not been chosen yet.** See [LICENSE](LICENSE)
   for the decision that is needed and the constraints from upstream.
 
-## Roadmap: C ABI and .NET
+## Phase 2: native C ABI
 
-Phase 2 turns `homa-ffi` into a flat, versioned `extern "C"` API (opaque
-socket handle, byte-slice in/out, integer error codes plus a last-error string)
-built as a `cdylib`. Phase 3 adds `Homa.NET`, which consumes it through
+Phase 2 is a **stable, versioned C ABI over the existing `homa-rs` transport**.
+It is an interoperability adapter, not a second transport. The public contract
+is `rust/crates/homa-ffi/include/homa_ffi.h`; the Linux shared library is
+`libhoma_ffi.so`. ABI version `1`. The implementation is synchronous. See
+[docs/native-interop.md](docs/native-interop.md) for every exported function,
+ownership rules, error codes, and the planned .NET `LibraryImport` mapping.
+
+Kernel interoperability of this layer has **not** been executed on a live
+Homa host (same situation as Phase 1). Compilation, unit tests, C-header
+layout checks and cross-compilation are what this development machine can
+verify.
+
+## Roadmap: .NET
+
+Phase 3 adds `Homa.NET`, which consumes `libhoma_ffi.so` through
 `LibraryImport` with a `SafeHandle`. Phase 4 layers `Homa.Rpc` (serialization,
 dispatch, cancellation) and `Homa.Rpc.Hosting` (DI/`IHostedService`) on top.
-The plan is detailed in [docs/native-interop.md](docs/native-interop.md).
+The mapping is detailed in [docs/native-interop.md](docs/native-interop.md).

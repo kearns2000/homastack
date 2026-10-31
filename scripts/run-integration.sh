@@ -2,7 +2,7 @@
 # run-integration.sh - run the kernel integration tests against the real Homa
 # module and record the outcome in tests/integration/results/.
 #
-# Requirements: Linux, homa module loaded, ports 7400-7499 free.
+# Requirements: Linux, homa module loaded, ports 7400-7599 free.
 # Usage: scripts/run-integration.sh [extra cargo test args]
 
 set -euo pipefail
@@ -34,15 +34,21 @@ cd rust
 set +e
 cargo test -p homa-sys --features header-check 2>&1 | tee -a "../$LOG"
 HEADER_RC=${PIPESTATUS[0]}
+cargo test -p homa-ffi --features header-check 2>&1 | tee -a "../$LOG"
+FFI_HEADER_RC=${PIPESTATUS[0]}
 cargo test -p homa-rs --test kernel_integration -- --ignored --test-threads=1 --nocapture "$@" 2>&1 | tee -a "../$LOG"
 RC=${PIPESTATUS[0]}
+cargo test -p homa-ffi --test ffi_kernel -- --ignored --test-threads=1 --nocapture "$@" 2>&1 | tee -a "../$LOG"
+FFI_RC=${PIPESTATUS[0]}
 set -e
 
 {
   echo
   echo "header_check_exit: $HEADER_RC"
+  echo "ffi_header_check_exit: $FFI_HEADER_RC"
   echo "integration_exit: $RC"
+  echo "ffi_kernel_exit: $FFI_RC"
 } | tee -a "../$LOG"
 
 echo "results written to $LOG"
-exit $(( RC != 0 || HEADER_RC != 0 ))
+exit $(( RC != 0 || HEADER_RC != 0 || FFI_HEADER_RC != 0 || FFI_RC != 0 ))

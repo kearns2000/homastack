@@ -1,4 +1,4 @@
-# HomaStack architecture (Phase 1)
+# HomaStack architecture (Phases 1 and 2)
 
 ## Layers
 
@@ -36,22 +36,23 @@ flowchart TB
 ```
 
 The Rust transport integrates directly with the existing Linux Homa kernel
-module through its socket API. The future .NET components consume the Rust
-transport through a stable C ABI; they never talk to the kernel themselves.
+module through its socket API. The .NET components (Phase 3+) consume the Rust
+transport through the Phase 2 C ABI; they never talk to the kernel themselves.
 
 | Component | Language | Responsibility |
 |---|---|---|
 | homa-sys | Rust | Low-level Linux Homa socket bindings and native interoperability |
 | homa-rs | Rust | Safe Rust API, RPC messages, buffer ownership and error handling |
-| homa-ffi (planned; placeholder crate only) | Rust | Stable C ABI exposing the Rust transport to other languages |
+| homa-ffi | Rust | Stable C ABI (`libhoma_ffi.so`, ABI 1) exposing the Rust transport to C, C++ and .NET |
 | Homa.NET (planned) | C# / .NET 10 | Managed transport API, native handles, asynchronous operations and cancellation |
 | Homa.Rpc, Homa.Rpc.Hosting (planned) | C# / .NET 10 | RPC clients, handlers, serialization, middleware and observability; `Hosting` adds DI and `IHostedService` integration |
 | Homa kernel module | C / Linux | Wire protocol, reliability, grants, packet scheduling and congestion control |
 
-Only `homa-sys`, `homa-rs` and the echo examples are implemented in Phase 1.
-`homa-ffi` (Phase 2) exists as a crate that exports an ABI version number and
-a platform probe and nothing else; `Homa.NET` (Phase 3) and `Homa.Rpc` /
-`Homa.Rpc.Hosting` (Phase 4) have no code yet.
+`homa-sys`, `homa-rs`, the echo examples and `homa-ffi` (ABI version 1, plus
+the C `ffi-client` example) are implemented. `Homa.NET` (Phase 3) and
+`Homa.Rpc` / `Homa.Rpc.Hosting` (Phase 4) have no code yet. Kernel
+interoperability of both Phase 1 and Phase 2 remains unverified until the
+ignored tests are run on a Linux host with `homa.ko`.
 
 ### Integration flow
 
@@ -106,6 +107,29 @@ translate results into Rust types. Everything on the wire is the kernel's job
 - `socket.rs`: `HomaSocket`. Creation order: map region → `socket()` →
   `bind()` → `SO_HOMA_RCVBUF` → `SO_HOMA_SERVER` → `HOMAIOCINFO` (actual
   port). Drop order: release pending bpages → close fd → unmap.
+
+### `homa-ffi`
+
+Adapter only: every call is forwarded to `homa-rs`. Nothing here implements
+the wire protocol or issues its own syscalls.
+
+- `types.rs`: `#[repr(C)]` structs (`homa_endpoint_t`, options, info,
+  message info) and the integer status codes. Layouts pinned by
+  `const` assertions and re-checked against `include/homa_ffi.h`.
+- `errors.rs`: `HomaError` → status mapping, thread-local last error,
+  panic boundary (`catch_unwind` → `HOMA_ERR_INTERNAL`).
+- `handles.rs`: generation-checked socket registry. `homa_socket_t *` is a
+  key, never a dereferenceable pointer; close-then-use is
+  `HOMA_ERR_INVALID_ARGUMENT`.
+- `messages.rs`: `Box<homa_rs::Message>` handed to C; payload pointer
+  stable until `homa_message_free`. Copied, not zero-copy.
+- `api.rs`: the `extern "C"` exports. Linux implementation calls
+  `HomaSocket`; other platforms return `HOMA_ERR_UNSUPPORTED_PLATFORM`.
+- `include/homa_ffi.h`: public C11 header. Linux builds of the cdylib
+  export only these symbols (`homa_ffi.map`).
+
+The C example `rust/examples/ffi-client` is the first consumer. Phase 3
+`Homa.NET` will be the second.
 
 ## Message flow
 

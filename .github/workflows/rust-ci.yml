@@ -53,10 +53,41 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo test -p homa-sys --features header-check
 
+      - name: C ABI header check (compile homa_ffi.h with cc)
+        run: cargo test -p homa-ffi --features header-check
+
       - name: Docs
         run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+
+      - name: Release native library
+        run: cargo build --release -p homa-ffi
+
+      - name: Native library symbols and C example (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          SO=target/release/libhoma_ffi.so
+          test -f "$SO"
+          echo "== exported homa_* symbols"
+          # GNU nm prints homa_socket_open@@HOMA_FFI_1 when a version script
+          # is in use. Strip the version tag before comparing.
+          nm -D --defined-only "$SO" | awk '/ T / {print $3}' | sed 's/@@.*//; s/@.*//' | sort -u > /tmp/homa-syms.txt
+          awk '/^[[:space:]]+homa_/ { gsub(/;/, ""); print $1 }' crates/homa-ffi/homa_ffi.map | sort -u > /tmp/homa-expected.txt
+          echo "-- exported"; cat /tmp/homa-syms.txt
+          echo "-- expected"; cat /tmp/homa-expected.txt
+          diff -u /tmp/homa-expected.txt /tmp/homa-syms.txt
+          echo "== native dependencies"
+          ldd "$SO"
+          echo "== compile public header as C11"
+          echo '#include "homa_ffi.h"' | cc -std=c11 -I crates/homa-ffi/include -x c -c -o /tmp/homa_ffi.o -
+          echo "== C smoke-test client"
+          cmake -S examples/ffi-client -B /tmp/ffi-client-build \
+            -DHOMA_FFI_LIB_DIR="$PWD/target/release"
+          cmake --build /tmp/ffi-client-build
+          /tmp/ffi-client-build/ffi-client --help >/dev/null
+
 
   cross-check:
     name: cross-check ${{ matrix.target }}
@@ -72,6 +103,12 @@ jobs:
         with:
           workspaces: rust
       - run: cargo clippy --workspace --all-targets --target ${{ matrix.target }} -- -D warnings
+      - name: Install aarch64 linker
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Cross-compile libhoma_ffi.so
+        run: cargo build --release -p homa-ffi --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
   # Kernel integration tests need a host with homa.ko loaded; GitHub-hosted
   # runners cannot load out-of-tree modules. Run on a self-hosted runner
