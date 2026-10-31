@@ -15,8 +15,8 @@ absent.
 
 - Linux host with `homa.ko` loaded (see `docs/linux-setup.md`), ideally built
   from the pinned revision `4bd0275714439da2955670a6c438f6c23304d785`.
-- Homa ports 7400–7499 free.
-- ≈ 1.5 GB of address space headroom: each test socket maps a 64 MiB region
+- Homa ports 7400-7499 free.
+- About 1.5 GB of address space headroom: each test socket maps a 64 MiB region
   (only touched pages are backed).
 - `cc` and Linux UAPI headers for the header check.
 

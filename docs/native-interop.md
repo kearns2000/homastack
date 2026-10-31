@@ -21,7 +21,7 @@ man pages `homa.7`, `sendmsg.2`, `recvmsg.2` from
 | `HOMA_MAX_MESSAGE_LENGTH` | 1 000 000 | max payload per message |
 | `HOMA_BPAGE_SHIFT` / `HOMA_BPAGE_SIZE` | 16 / 65 536 | receive page size |
 | `HOMA_MAX_BPAGES` | 16 | max fragments per message |
-| `HOMA_MIN_DEFAULT_PORT` | 0x8000 | ports ≥ this are auto-assigned; `bind` accepts only 1–32767 |
+| `HOMA_MIN_DEFAULT_PORT` | 0x8000 | ports ≥ this are auto-assigned; `bind` accepts only 1-32767 |
 | `HOMA_SENDMSG_PRIVATE` | 0x01 | request flag |
 | `SO_HOMA_RCVBUF` / `SO_HOMA_SERVER` | 10 / 11 | setsockopt options |
 | `HOMA_ERROR_MSG_SIZE` | 104 | `homa_info.error_msg` |
@@ -115,14 +115,15 @@ void     homa_message_free(homa_message_t *m);
 int32_t homa_last_error_message(char *buf, uint32_t len);
 ```
 
-.NET side (`Homa.NET`):
+.NET side (`Homa.NET`, Phase 3; `Homa.Rpc`/`Homa.Rpc.Hosting` follow in
+Phase 4):
 
 - `LibraryImport` (source-generated P/Invoke) with `SafeHandle` subclasses for
   `homa_socket_t` and `homa_message_t`; `Message.Span` exposes the native bytes
   until disposal, or copies into a `byte[]`/`Memory<byte>` for the simple API.
 - `HomaSocket` (sync) mirrors `homa-rs`; `HomaClient` adds `Task`-based
   `RequestAsync` by running the blocking receive on a dedicated thread per
-  socket (Phase 2) and later on a native poller once async lands in Rust.
+  socket (Phase 3) and later on a native poller once async lands in Rust.
 - Errors map to `HomaException { ErrorKind, Errno, Detail }` with the same
   classification as `homa_rs::ErrorKind`.
 - Packaging: `runtimes/linux-x64/native/libhoma_ffi.so` and

@@ -2,7 +2,7 @@
 rust/target/
 **/*.rs.bk
 
-# .NET (Phase 2)
+# .NET (Phase 3+)
 dotnet/**/bin/
 dotnet/**/obj/
 *.user

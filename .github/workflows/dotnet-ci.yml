@@ -1,8 +1,9 @@
 name: dotnet-ci
 
-# Phase 2 placeholder. The .NET projects (Homa.NET, Homa.Rpc, Homa.Rpc.Hosting)
-# are not implemented in Phase 1; this workflow only verifies that the solution
-# builds once it exists, and otherwise reports that Phase 2 has not started.
+# Placeholder for Phases 3 and 4. The .NET projects (Homa.NET, Homa.Rpc,
+# Homa.Rpc.Hosting) are not implemented in Phase 1; this workflow only verifies
+# that the solution builds once it exists, and otherwise reports that the .NET
+# phases have not started.
 
 on:
   push:
@@ -24,7 +25,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::dotnet/HomaStack.slnx not present - Phase 2 has not started; nothing to build."
+            echo "::notice::dotnet/HomaStack.slnx not present - Phase 3 (.NET) has not started; nothing to build."
           fi
 
       - uses: actions/setup-dotnet@v4

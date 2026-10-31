@@ -92,9 +92,9 @@ scripts/run-integration.sh
 | Symptom | Meaning / fix |
 |---------|---------------|
 | `socket failed: Protocol not supported (os error 93)` | module not loaded: `sudo insmod homa.ko` |
-| `bind failed: Invalid argument … port number invalid` | server ports must be 1–32767 |
+| `bind failed: Invalid argument … port number invalid` | server ports must be 1-32767 |
 | `bind failed: Address already in use` | another Homa socket owns the port (TCP/UDP ports do not conflict) |
-| `setsockopt(SO_HOMA_RCVBUF) failed: Invalid argument (homa: buffer pool is not large enough)` | increase `--buffer-mib`; minimum ≈ 2 MiB + 64 KiB × `nr_cpu_ids` |
+| `setsockopt(SO_HOMA_RCVBUF) failed: Invalid argument (homa: buffer pool is not large enough)` | increase `--buffer-mib`; minimum about 2 MiB + 64 KiB × `nr_cpu_ids` |
 | `recvmsg failed: Cannot allocate memory` | receive pool exhausted - messages were not recycled or the pool is too small |
 | `RPC … failed: Transport endpoint is not connected` | no Homa socket on the destination port |
 | `RPC … failed: Connection timed out` | peer host unreachable or its module not loaded (kernel `timeout_ticks`) |

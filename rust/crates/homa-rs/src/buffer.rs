@@ -28,7 +28,7 @@ use crate::error::{HomaError, Result};
 /// Default receive-region size: 1024 bpages = 64 MiB.
 ///
 /// The kernel's minimum is `nr_cpu_ids × 64 KiB + 2 × HOMA_MAX_MESSAGE_LENGTH`
-/// (≈ 2 MiB + 64 KiB per possible CPU; `nr_cpu_ids` can exceed the number of
+/// (about 2 MiB + 64 KiB per possible CPU; `nr_cpu_ids` can exceed the number of
 /// online CPUs). 64 MiB comfortably covers typical hosts and matches the
 /// upstream examples' `1000 * HOMA_BPAGE_SIZE`.
 pub const DEFAULT_REGION_BYTES: usize = 1024 * HOMA_BPAGE_SIZE;

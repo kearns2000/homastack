@@ -10,7 +10,7 @@
 //! ```
 //!
 //! or via `scripts/run-integration.sh`, which also records the results.
-//! Ports 7400–7499 must be free. See `tests/integration/README.md` at the
+//! Ports 7400-7499 must be free. See `tests/integration/README.md` at the
 //! repository root for the procedure and the results log.
 
 #![cfg(target_os = "linux")]

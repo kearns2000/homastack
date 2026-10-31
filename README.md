@@ -29,8 +29,8 @@ make it usable from Rust and .NET through a layered design:
 | Safe Rust API | `rust/crates/homa-rs` | **Phase 1 - implemented** |
 | Examples | `rust/examples/echo-server`, `echo-client` | **Phase 1 - implemented** |
 | Stable C ABI | `rust/crates/homa-ffi` | placeholder (Phase 2) |
-| Managed wrapper | `dotnet/src/Homa.NET` | planned (Phase 2) |
-| RPC framework | `dotnet/src/Homa.Rpc`, `Homa.Rpc.Hosting` | planned (Phase 3) |
+| Managed wrapper | `dotnet/src/Homa.NET` | planned (Phase 3) |
+| RPC framework | `dotnet/src/Homa.Rpc`, `Homa.Rpc.Hosting` | planned (Phase 4) |
 | Userspace Homa in Rust | - | possible future work |
 
 ## Phase 1: what this is
@@ -81,9 +81,9 @@ flowchart TB
         direction TB
         app["echo-client / echo-server<br/>(or any application)"]
         rs["homa-rs<br/>HomaSocket · Message · RpcId<br/>buffer pool ownership · errno mapping"]
-        sys["homa-sys<br/>#35;[repr(C)] ABI mirrors · syscall wrappers · mmap region"]
-        ffi["homa-ffi (Phase 2)<br/>stable extern &quot;C&quot; surface"]
-        net["Homa.NET / Homa.Rpc (Phase 2–3)<br/>.NET 10, LibraryImport"]
+        sys["homa-sys<br/>repr(C) ABI mirrors · syscall wrappers · mmap region"]
+        ffi["homa-ffi (Phase 2)<br/>stable extern #quot;C#quot; surface"]
+        net["Homa.NET / Homa.Rpc (Phase 3-4)<br/>.NET 10, LibraryImport"]
         app --> rs --> sys
         net -. P/Invoke .-> ffi --> rs
     end
@@ -214,7 +214,7 @@ Homa is absent, and they are never mocked.
 
 Phase 2 turns `homa-ffi` into a flat, versioned `extern "C"` API (opaque
 socket handle, byte-slice in/out, integer error codes plus a last-error string)
-built as a `cdylib`, and `Homa.NET` consumes it through `LibraryImport` with a
-`SafeHandle`. Phase 3 layers `Homa.Rpc` (serialization, dispatch, cancellation)
-and `Homa.Rpc.Hosting` (DI/`IHostedService`) on top. The plan is detailed in
-[docs/native-interop.md](docs/native-interop.md).
+built as a `cdylib`. Phase 3 adds `Homa.NET`, which consumes it through
+`LibraryImport` with a `SafeHandle`. Phase 4 layers `Homa.Rpc` (serialization,
+dispatch, cancellation) and `Homa.Rpc.Hosting` (DI/`IHostedService`) on top.
+The plan is detailed in [docs/native-interop.md](docs/native-interop.md).

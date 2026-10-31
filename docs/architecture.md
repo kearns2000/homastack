@@ -3,25 +3,75 @@
 ## Layers
 
 ```mermaid
-flowchart LR
-    subgraph rust["rust/ (Cargo workspace)"]
-        sys["homa-sys<br/>abi.rs · sys.rs · region.rs"]
-        rs["homa-rs<br/>socket.rs · buffer.rs · addr.rs<br/>transport.rs · error.rs"]
-        ffi["homa-ffi<br/>(Phase 2 placeholder)"]
-        srv["echo-server"]
-        cli["echo-client"]
+flowchart TB
+    subgraph user["User Space"]
+        direction TB
+
+        app["Applications / Echo Client / Echo Server"]
+        rs["homa-rs: HomaSocket, Message, RpcId, Buffer Pool"]
+        sys["homa-sys: Native Linux Bindings and Syscall Wrappers"]
+        ffi["homa-ffi: Stable C ABI - Phase 2"]
+        net["Homa.NET: Managed .NET 10 API - Phase 3"]
+        rpc["Homa.Rpc: RPC Framework - Phase 4"]
+
+        app --> rs
         rs --> sys
+
+        rpc --> net
+        net --> ffi
         ffi --> rs
-        srv --> rs
-        cli --> rs
     end
-    subgraph dotnet["dotnet/ (Phase 2+)"]
-        net["Homa.NET"] --> ffi
-        rpc["Homa.Rpc"] --> net
-        host["Homa.Rpc.Hosting"] --> rpc
+
+    subgraph kernel["Linux Kernel"]
+        mod["Homa Kernel Module"]
+        protocol["RPC State, Retransmission, Grants and Priorities"]
+        ip["IP and Network Interface"]
+
+        mod --> protocol
+        protocol --> ip
     end
-    sys --> k["Linux homa.ko"]
+
+    sys -->|"Linux Socket API"| mod
+    mod -->|"Receive Buffer Management"| sys
 ```
+
+The Rust transport integrates directly with the existing Linux Homa kernel
+module through its socket API. The future .NET components consume the Rust
+transport through a stable C ABI; they never talk to the kernel themselves.
+
+| Component | Language | Responsibility |
+|---|---|---|
+| homa-sys | Rust | Low-level Linux Homa socket bindings and native interoperability |
+| homa-rs | Rust | Safe Rust API, RPC messages, buffer ownership and error handling |
+| homa-ffi (planned; placeholder crate only) | Rust | Stable C ABI exposing the Rust transport to other languages |
+| Homa.NET (planned) | C# / .NET 10 | Managed transport API, native handles, asynchronous operations and cancellation |
+| Homa.Rpc, Homa.Rpc.Hosting (planned) | C# / .NET 10 | RPC clients, handlers, serialization, middleware and observability; `Hosting` adds DI and `IHostedService` integration |
+| Homa kernel module | C / Linux | Wire protocol, reliability, grants, packet scheduling and congestion control |
+
+Only `homa-sys`, `homa-rs` and the echo examples are implemented in Phase 1.
+`homa-ffi` (Phase 2) exists as a crate that exports an ABI version number and
+a platform probe and nothing else; `Homa.NET` (Phase 3) and `Homa.Rpc` /
+`Homa.Rpc.Hosting` (Phase 4) have no code yet.
+
+### Integration flow
+
+Two application paths are intended:
+
+- **Rust application:**
+  Rust Application → homa-rs → homa-sys → Linux Homa kernel module → Network
+- **.NET application:**
+  .NET Application → Homa.Rpc → Homa.NET → homa-ffi → homa-rs → homa-sys →
+  Linux Homa kernel module → Network
+
+In both paths the Linux Homa kernel module is an **external dependency**
+maintained by the upstream Homa project
+([PlatformLab/HomaModule](https://github.com/PlatformLab/HomaModule)); it must
+be built and loaded separately (see `linux-setup.md`). HomaStack does not
+implement the Homa wire protocol. The Rust crates only drive the module's
+socket interface: they create sockets, register the receive region, build the
+`sendmsg`/`recvmsg` control blocks, track and return buffer pages, and
+translate results into Rust types. Everything on the wire is the kernel's job
+(see "What stays in the kernel" below).
 
 ### `homa-sys`
 
@@ -68,17 +118,17 @@ sequenceDiagram
 
     C->>KC: sendmsg(msg_name=server, iov=payload,<br/>control={id:0, cookie, PRIVATE}, controllen=0)
     KC-->>C: returns 0, control.id = 2k (even)
-    KC->>KS: DATA packets (+ grants for long messages)
+    KC->>KS: DATA packets (plus grants for long messages)
     KS->>KS: allocate bpages in S's region,<br/>copy payload, queue RPC 2k+1
     S->>KS: recvmsg(control={id:0, bpages to recycle})
     KS-->>S: len, control.id = 2k+1 (odd), bpage_offsets[], msg_name = client
-    S->>S: FragmentLayout::validate → copy_out → Vec<u8>;<br/>queue bpages for return
+    S->>S: FragmentLayout::validate, copy_out to owned Vec,<br/>queue bpages for return
     S->>KS: sendmsg(msg_name=client, iov=payload,<br/>control={id: 2k+1})
     KS->>KC: DATA packets
     KC->>KC: allocate bpages in C's region, copy, complete RPC 2k
     C->>KC: recvmsg(control={id: 2k})
     KC-->>C: len, control.id = 2k, cookie, bpage_offsets[], msg_name = server
-    C->>C: validate → copy_out → verify bytes
+    C->>C: validate, copy_out, verify bytes
     C->>KC: next recvmsg carries the previous bpages back
 ```
 
