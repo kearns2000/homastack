@@ -1,0 +1,23 @@
+[package]
+name = "homa-sys"
+description = "Low-level Rust bindings to the Linux Homa kernel module socket interface (homa.h)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+authors.workspace = true
+links = "homa_uapi"
+
+[dependencies]
+libc = { workspace = true }
+
+[features]
+default = []
+# Compiles the vendored upstream `homa.h` with the system C compiler at test
+# time and compares struct sizes / offsets / ioctl numbers against the Rust
+# definitions. Linux only; requires `cc` and Linux UAPI headers.
+header-check = []
+
+[lints]
+workspace = true

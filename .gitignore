@@ -1,0 +1,18 @@
+# Rust
+rust/target/
+**/*.rs.bk
+
+# .NET (Phase 2)
+dotnet/**/bin/
+dotnet/**/obj/
+*.user
+
+# Upstream inspection clones (not vendored; see docs/native-interop.md for the
+# pinned revision and rust/crates/homa-sys/upstream for the vendored header).
+.upstream/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

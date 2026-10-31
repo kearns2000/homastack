@@ -1,0 +1,23 @@
+[package]
+name = "homa-echo-server"
+description = "Single-threaded Homa echo server built on homa-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "echo-server"
+path = "src/main.rs"
+
+[dependencies]
+homa-rs = { workspace = true }
+clap = { workspace = true }
+ctrlc = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true

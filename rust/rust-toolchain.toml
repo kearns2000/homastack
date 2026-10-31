@@ -1,0 +1,4 @@
+[toolchain]
+# Pinned stable toolchain. Rust 2024 edition requires >= 1.85.
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]

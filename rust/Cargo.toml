@@ -1,0 +1,50 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/homa-sys",
+    "crates/homa-rs",
+    "crates/homa-ffi",
+    "examples/echo-client",
+    "examples/echo-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+# NOTE: the repository licence has not been selected yet (see /LICENSE).
+# Crates are marked publish = false until that decision is made.
+publish = false
+repository = "https://github.com/kearns2000/homastack"
+authors = ["HomaStack contributors"]
+
+[workspace.dependencies]
+homa-sys = { path = "crates/homa-sys" }
+homa-rs = { path = "crates/homa-rs" }
+libc = "0.2"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+struct_field_names = "allow"
+doc_markdown = "allow"
+
+[profile.release]
+debug = 1
+lto = "thin"

@@ -1,0 +1,90 @@
+name: rust-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["rust/**", ".github/workflows/rust-ci.yml", "scripts/**"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust-ci.yml", "scripts/**"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+defaults:
+  run:
+    working-directory: rust
+
+jobs:
+  lint-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the version; rustup picks it up automatically.
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Environment report (read-only)
+        run: ../scripts/check-environment.sh || true
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Unit tests
+        run: cargo test --workspace
+
+      - name: Header check (compile vendored homa.h with cc)
+        if: runner.os == 'Linux'
+        run: cargo test -p homa-sys --features header-check
+
+      - name: Docs
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  cross-check:
+    name: cross-check ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [aarch64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo clippy --workspace --all-targets --target ${{ matrix.target }} -- -D warnings
+
+  # Kernel integration tests need a host with homa.ko loaded; GitHub-hosted
+  # runners cannot load out-of-tree modules. Run on a self-hosted runner
+  # labelled `homa` (opt-in; the job is skipped when no such runner exists).
+  kernel-integration:
+    name: kernel integration (self-hosted, homa)
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[homa-integration]')
+    runs-on: [self-hosted, linux, homa]
+    steps:
+      - uses: actions/checkout@v4
+      - run: ../scripts/run-integration.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: homa-integration-results
+          path: tests/integration/results/

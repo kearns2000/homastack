@@ -1,0 +1,41 @@
+name: dotnet-ci
+
+# Phase 2 placeholder. The .NET projects (Homa.NET, Homa.Rpc, Homa.Rpc.Hosting)
+# are not implemented in Phase 1; this workflow only verifies that the solution
+# builds once it exists, and otherwise reports that Phase 2 has not started.
+
+on:
+  push:
+    branches: [main]
+    paths: ["dotnet/**", ".github/workflows/dotnet-ci.yml"]
+  pull_request:
+    paths: ["dotnet/**", ".github/workflows/dotnet-ci.yml"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect solution
+        id: detect
+        run: |
+          if [ -f dotnet/HomaStack.slnx ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::dotnet/HomaStack.slnx not present - Phase 2 has not started; nothing to build."
+          fi
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.detect.outputs.present == 'true'
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore / build / test
+        if: steps.detect.outputs.present == 'true'
+        working-directory: dotnet
+        run: |
+          dotnet restore HomaStack.slnx
+          dotnet build HomaStack.slnx --no-restore --configuration Release
+          dotnet test HomaStack.slnx --no-build --configuration Release

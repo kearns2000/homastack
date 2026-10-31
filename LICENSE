@@ -1,0 +1,37 @@
+HomaStack licence: NOT YET SELECTED
+====================================
+
+No open-source licence has been chosen for the HomaStack repository yet.
+Until the project owners select one, the code in this repository is
+"all rights reserved" by its authors by default. This file is a placeholder
+so that the decision is visible and tracked; it is not itself a licence.
+
+Decision needed
+---------------
+Pick a licence (common choices for Rust/.NET infrastructure are MIT,
+Apache-2.0, or "MIT OR Apache-2.0"), replace this file with its text, and set
+the `license` field in `rust/Cargo.toml` `[workspace.package]`.
+
+Upstream licence obligations that constrain the choice
+------------------------------------------------------
+1. PlatformLab/HomaModule (Linux kernel module)
+   https://github.com/PlatformLab/HomaModule
+   Pinned revision: 4bd0275714439da2955670a6c438f6c23304d785 (2026-10-27)
+   - `homa.h` (user-space API header):
+       SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0+ WITH Linux-syscall-note
+     A verbatim copy is vendored at `rust/crates/homa-sys/upstream/homa.h`
+     together with its man pages (`homa.7`, `sendmsg.2`, `recvmsg.2`), under
+     the BSD-2-Clause option. The BSD-2-Clause notice is reproduced in
+     `rust/crates/homa-sys/upstream/LICENSE-BSD-2-Clause`.
+   - Kernel sources (`homa_*.c`, `homa_receiver.cc`): BSD-2-Clause OR GPL-2.0+.
+     No implementation code was copied from them; they were read to verify
+     the socket interface. The Rust code here is an independent
+     implementation of the user-space side of that interface.
+2. PlatformLab/Homa (older user-space C++ transport)
+   https://github.com/PlatformLab/Homa
+   Pinned revision: 6f0873de6b1b8cd060c21735c04de1fb9a27c693 (2022-11-09)
+   Licence: ISC (Copyright (c) 2018-2019, Stanford University).
+   Consulted for architecture only; no code copied.
+
+Because only the BSD-2-Clause option of the vendored header is exercised,
+any OSI-approved permissive licence (MIT, Apache-2.0, BSD) is compatible.
