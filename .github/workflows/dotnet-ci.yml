@@ -1,8 +1,8 @@
 name: dotnet-ci
 
-# Builds libhoma_ffi, then builds and tests Homa.NET.
-# Socket open is expected to fail on the runner (no homa.ko). This does not
-# execute a Homa RPC.
+# Builds libhoma_ffi, then builds and tests Homa.NET and Homa.Rpc.
+# Socket open is expected to fail on the runner (no homa.ko). Homa.Rpc tests
+# do not open a socket. This does not execute a Homa RPC.
 
 on:
   push:

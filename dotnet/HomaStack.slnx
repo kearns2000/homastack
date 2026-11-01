@@ -1,8 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Homa.NET/Homa.NET.csproj" />
+    <Project Path="src/Homa.Rpc.Hosting/Homa.Rpc.Hosting.csproj" />
+    <Project Path="src/Homa.Rpc/Homa.Rpc.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Homa.NET.Tests/Homa.NET.Tests.csproj" />
+    <Project Path="tests/Homa.Rpc.Tests/Homa.Rpc.Tests.csproj" />
   </Folder>
 </Solution>

@@ -188,8 +188,9 @@ aarch64. The crate compiles on macOS so the ABI tests run there;
 
 ### .NET 10 mapping (Phase 3)
 
-Implemented in `dotnet/src/Homa.NET` (`net10.0`). `Homa.Rpc` is not part of
-this phase. The wrapper calls `libhoma_ffi` with `LibraryImport` and owns
+Implemented in `dotnet/src/Homa.NET` (`net10.0`). `Homa.Rpc` (Phase 4) puts its
+own frame inside these payload bytes and does not change ABI version 1. The
+wrapper calls `libhoma_ffi` with `LibraryImport` and owns
 sockets and messages with `SafeHandle`. Public types are `HomaSocket`,
 `HomaClient`, `HomaMessage`, `HomaException` and `HomaStatus`, in the `Homa`
 namespace.
@@ -239,4 +240,5 @@ selected). At runtime the loader checks `HOMA_FFI_PATH`, then
 default `homa_ffi` probe. Non-Linux builds of the native library return
 `HOMA_ERR_UNSUPPORTED_PLATFORM`. Linux without `homa.ko` returns
 `HOMA_ERR_UNAVAILABLE`. Managed tests cover layout, argument checks, ABI
-version 1 and that failed open. They have not exchanged an RPC.
+version 1 and that failed open. `Homa.Rpc` tests drive an in-memory caller and
+do not open a socket. Neither suite has exchanged an RPC.

@@ -1,4 +1,4 @@
-# HomaStack architecture (Phases 1 to 3)
+# HomaStack architecture (Phases 1 to 4)
 
 ## Layers
 
@@ -37,7 +37,7 @@ flowchart TB
 
 The Rust transport integrates directly with the existing Linux Homa kernel
 module through its socket API. `Homa.NET` consumes that transport through the
-Phase 2 C ABI, and `Homa.Rpc` will do the same.
+Phase 2 C ABI. `Homa.Rpc` calls `Homa.NET` and does not add native symbols.
 
 | Component | Language | Responsibility |
 |---|---|---|
@@ -45,15 +45,16 @@ Phase 2 C ABI, and `Homa.Rpc` will do the same.
 | homa-rs | Rust | Safe Rust API, RPC messages, buffer ownership and error handling |
 | homa-ffi | Rust | Stable C ABI (`libhoma_ffi.so`, ABI 1) exposing the Rust transport to C, C++ and .NET |
 | Homa.NET | C# / .NET 10 | Managed transport API over `libhoma_ffi`: safe handles, asynchronous waits and cancellation |
-| Homa.Rpc, Homa.Rpc.Hosting (planned) | C# / .NET 10 | RPC clients, handlers, serialization, middleware and observability; `Hosting` adds DI and `IHostedService` integration |
+| Homa.Rpc, Homa.Rpc.Hosting | C# / .NET 10 | RPC clients, handlers, serialization, middleware and diagnostics; `Hosting` adds DI and `IHostedService` integration |
 | Homa kernel module | C / Linux | Wire protocol, reliability, grants, packet scheduling and congestion control |
 
 `homa-sys`, `homa-rs`, the echo examples, `homa-ffi` (ABI version 1, plus the
-C `ffi-client` example) and `Homa.NET` are implemented. `Homa.Rpc` and
-`Homa.Rpc.Hosting` (Phase 4) have no code yet. Kernel interoperability of
-Phases 1, 2 and 3 remains unverified until the ignored tests are run on a
-Linux host with `homa.ko`. The managed tests check layout, arguments and a
-failed open; they do not exchange an RPC.
+C `ffi-client` example), `Homa.NET`, `Homa.Rpc` and `Homa.Rpc.Hosting` are
+implemented. Kernel interoperability of Phases 1 to 4 remains unverified until
+the ignored tests are run on a Linux host with `homa.ko`. The `Homa.NET` tests
+check layout, arguments and a failed open. The `Homa.Rpc` tests check framing,
+dispatch, middleware, cancellation and DI in memory. They do not open a socket
+and they do not exchange an RPC.
 
 ### Integration flow
 
@@ -130,7 +131,35 @@ the wire protocol or issues its own syscalls.
   export only these symbols (`homa_ffi.map`).
 
 The C example `rust/examples/ffi-client` and `Homa.NET` are the consumers of
-this ABI. `Homa.Rpc` (Phase 4) is not implemented.
+this ABI. `Homa.Rpc` (Phase 4) sits on `Homa.NET`.
+
+### `Homa.Rpc`
+
+A call is one Homa request. The payload is a little-endian frame, version 1:
+
+- bytes 0-3: ASCII `HOMA`
+- version `uint16` = 1, kind `uint16` (1 request, 2 response)
+- status `int32` (`RpcStatus`, which is not a `HomaStatus`)
+- method name and detail lengths as `uint16`, payload length as `uint32`
+- UTF-8 method name (at most 256 bytes), UTF-8 detail (at most 1024 bytes), then the serializer payload
+
+The whole frame has to fit in 1 000 000 bytes. `BytesRpcSerializer` accepts a
+string or a `byte[]`. `JsonRpcSerializer` uses `JsonSerializerDefaults.Web`.
+
+`RpcPipeline` decodes the frame, runs middleware outside-in, then the handler.
+A handler exception becomes `HandlerFault` with the exception message and no
+stack. An already-cancelled token skips middleware and the handler and returns
+`Cancelled`. `HomaRpcClient` turns that status into `OperationCanceledException`
+only when its own token is cancelled. A transport deadline is `Timeout`.
+
+`HomaRpcServer.RunAsync` receives shared requests and replies on a separate
+task per request. `Homa.Rpc.Hosting` registers the pipeline, logs each call,
+opens an `IServiceScope` for the call (`RpcContext.GetRequestServices`), and
+hosts the server. `StartAsync` is the call that binds a socket. Diagnostics use
+`ActivitySource` `Homa.Rpc` and `RpcMetrics`.
+
+`HomaRpcCaller.Open`, `HomaRpcServer.Bind` and the hosted service's `StartAsync`
+need `homa.ko`. Those paths have not been executed.
 
 ## Message flow
 

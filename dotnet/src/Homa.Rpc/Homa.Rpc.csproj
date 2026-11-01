@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Homa.Rpc</RootNamespace>
+    <AssemblyName>Homa.Rpc</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>RPC client, dispatch, framing and middleware over Homa.NET.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Homa.NET/Homa.NET.csproj" />
+  </ItemGroup>
+</Project>

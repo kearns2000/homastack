@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Homa.Rpc.Hosting</RootNamespace>
+    <AssemblyName>Homa.Rpc.Hosting</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Dependency injection and IHostedService hosting for Homa.Rpc.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Homa.Rpc/Homa.Rpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+</Project>
