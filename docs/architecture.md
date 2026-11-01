@@ -1,4 +1,4 @@
-# HomaStack architecture (Phases 1 and 2)
+# HomaStack architecture (Phases 1 to 3)
 
 ## Layers
 
@@ -36,23 +36,24 @@ flowchart TB
 ```
 
 The Rust transport integrates directly with the existing Linux Homa kernel
-module through its socket API. The .NET components (Phase 3+) consume the Rust
-transport through the Phase 2 C ABI; they never talk to the kernel themselves.
+module through its socket API. `Homa.NET` consumes that transport through the
+Phase 2 C ABI, and `Homa.Rpc` will do the same.
 
 | Component | Language | Responsibility |
 |---|---|---|
 | homa-sys | Rust | Low-level Linux Homa socket bindings and native interoperability |
 | homa-rs | Rust | Safe Rust API, RPC messages, buffer ownership and error handling |
 | homa-ffi | Rust | Stable C ABI (`libhoma_ffi.so`, ABI 1) exposing the Rust transport to C, C++ and .NET |
-| Homa.NET (planned) | C# / .NET 10 | Managed transport API, native handles, asynchronous operations and cancellation |
+| Homa.NET | C# / .NET 10 | Managed transport API over `libhoma_ffi`: safe handles, asynchronous waits and cancellation |
 | Homa.Rpc, Homa.Rpc.Hosting (planned) | C# / .NET 10 | RPC clients, handlers, serialization, middleware and observability; `Hosting` adds DI and `IHostedService` integration |
 | Homa kernel module | C / Linux | Wire protocol, reliability, grants, packet scheduling and congestion control |
 
-`homa-sys`, `homa-rs`, the echo examples and `homa-ffi` (ABI version 1, plus
-the C `ffi-client` example) are implemented. `Homa.NET` (Phase 3) and
-`Homa.Rpc` / `Homa.Rpc.Hosting` (Phase 4) have no code yet. Kernel
-interoperability of both Phase 1 and Phase 2 remains unverified until the
-ignored tests are run on a Linux host with `homa.ko`.
+`homa-sys`, `homa-rs`, the echo examples, `homa-ffi` (ABI version 1, plus the
+C `ffi-client` example) and `Homa.NET` are implemented. `Homa.Rpc` and
+`Homa.Rpc.Hosting` (Phase 4) have no code yet. Kernel interoperability of
+Phases 1, 2 and 3 remains unverified until the ignored tests are run on a
+Linux host with `homa.ko`. The managed tests check layout, arguments and a
+failed open; they do not exchange an RPC.
 
 ### Integration flow
 
@@ -128,8 +129,8 @@ the wire protocol or issues its own syscalls.
 - `include/homa_ffi.h`: public C11 header. Linux builds of the cdylib
   export only these symbols (`homa_ffi.map`).
 
-The C example `rust/examples/ffi-client` is the first consumer. Phase 3
-`Homa.NET` will be the second.
+The C example `rust/examples/ffi-client` and `Homa.NET` are the consumers of
+this ABI. `Homa.Rpc` (Phase 4) is not implemented.
 
 ## Message flow
 

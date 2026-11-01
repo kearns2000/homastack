@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Homa</RootNamespace>
+    <AssemblyName>Homa.NET</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DisableRuntimeMarshalling>true</DisableRuntimeMarshalling>
+    <IsPackable>false</IsPackable>
+    <Description>Managed .NET 10 API over the HomaStack native transport (libhoma_ffi).</Description>
+  </PropertyGroup>
+</Project>

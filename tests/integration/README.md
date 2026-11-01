@@ -10,7 +10,9 @@ never mocked. The test code lives in
 `rust/crates/homa-rs/tests/kernel_integration.rs` and
 `rust/crates/homa-ffi/tests/ffi_kernel.rs`. Every test is marked
 `#[ignore]` so that an ordinary `cargo test` does not fail where Homa is
-absent.
+absent. `dotnet test` on `Homa.NET` checks the managed wrapper against
+`libhoma_ffi` and does not exchange an RPC. Kernel interoperability of the
+Rust and .NET layers has not been executed.
 
 ## Requirements
 

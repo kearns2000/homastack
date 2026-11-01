@@ -186,28 +186,57 @@ and `homa_ffi.h`). Supported runtime architectures: Linux x86_64 and
 aarch64. The crate compiles on macOS so the ABI tests run there;
 `homa_socket_open` then returns `HOMA_ERR_UNSUPPORTED_PLATFORM`.
 
-### Planned .NET 10 mapping (Phase 3, not implemented)
+### .NET 10 mapping (Phase 3)
 
-| C | .NET `LibraryImport` |
+Implemented in `dotnet/src/Homa.NET` (`net10.0`). `Homa.Rpc` is not part of
+this phase. The wrapper calls `libhoma_ffi` with `LibraryImport` and owns
+sockets and messages with `SafeHandle`. Public types are `HomaSocket`,
+`HomaClient`, `HomaMessage`, `HomaException` and `HomaStatus`, in the `Homa`
+namespace.
+
+| C | .NET |
 |---|---|
-| `homa_socket_t *` | `SafeHandle` subclass (`HomaSocketHandle`) |
-| `homa_message_t *` | `SafeHandle` subclass (`HomaMessageHandle`); `DangerousGetHandle` only inside the wrapper |
-| `homa_status_t` / `int32_t` | `int` |
-| `uint64_t` (RPC id, cookie, lengths) | `ulong` |
-| `uint16_t` (port, family) | `ushort` |
-| `const uint8_t *` + `uint64_t len` | `ReadOnlySpan<byte>` (source-generated marshalling) or `byte*` + `nuint` |
-| `homa_endpoint_t` (24 bytes, blittable) | `readonly struct` with `LayoutKind.Sequential` |
-| `homa_message_info_t` | sequential struct; `payload` becomes `byte*` then `ReadOnlySpan<byte>` of `payload_len` |
-| `bool` (`homa_ffi_platform_supported`) | `[return: MarshalAs(UnmanagedType.U1)] bool` |
-| `const char *` (`homa_status_name`) | `byte*` / `Marshal.PtrToStringUTF8` (static, never freed) |
-| `homa_last_error_message` | `Span<byte>` plus `out ulong required` |
-| timeouts | `int` milliseconds; `-1` = infinite. Future `ValueTask` wrappers run the blocking call on a dedicated thread per socket. |
+| `homa_socket_t *` | `HomaSocketHandle` (`SafeHandle`). The bit pattern stays a registry key. |
+| `homa_message_t *` | `HomaMessageHandle`. Freed once on dispose. Callers never see the pointer. |
+| `homa_status_t` | `HomaStatus` (`int`). Failures throw `HomaException`, which copies the thread-local message and errno before the next call. |
+| `uint64_t` ids, cookies, lengths | `ulong` |
+| `uint16_t` port and family | `ushort`. Managed code uses `IPEndPoint` and `AddressFamily`. |
+| `const uint8_t *` + length | `ReadOnlySpan<byte>` (pointer only; the length is a separate argument) |
+| `homa_endpoint_t` (24 bytes) | sequential blittable struct, converted to and from `IPEndPoint` |
+| `homa_socket_options_t` (24) / `homa_socket_info_t` (32) / `homa_message_info_t` (72) | sequential structs. `struct_size` is set to the managed size, which tests assert equals the C size. |
+| `bool` | `[return: MarshalAs(UnmanagedType.U1)] bool` |
+| `const char *` (`homa_status_name`) | `Marshal.PtrToStringUTF8`. The string is static and is never freed. |
+| `homa_last_error_message` | `Span<byte>` plus `out ulong` |
+| timeouts | `TimeSpan?`. Null and `Timeout.InfiniteTimeSpan` are `-1`. Zero is one non-blocking attempt. |
 
-Packaging: `runtimes/linux-x64/native/libhoma_ffi.so` and `linux-arm64`.
-Non-Linux RIDs ship no native asset; `homa_ffi_platform_supported` guards
-usage. No reflection-based marshalling is required: every public type is
-blittable or a pointer plus length.
+`RequestAsync` and `RecvResponseAsync` run the blocking wait with `Task.Run`,
+one wait per call, so different private RPC ids proceed at the same time.
+Cancellation calls `homa_abort_rpc` on that id. `homa_request` is the
+synchronous `HomaSocket.Request` path and is not used when a token must abort
+the RPC, because that call does not return the id until the response arrives.
+`RecvAsync` has no single id to abort: a token that is already cancelled fails
+before the wait, and a later cancel does not interrupt it. `Shutdown` wakes
+shared receivers.
 
-Open questions deferred to Phase 3: zero-copy views (needs a zero-copy
-`homa-rs` first), richer `HOMAIOCINFO` surface, and whether cancellation
-should abort or let the kernel time out.
+A private wait with a zero timeout is one attempt and then an abort of that
+RPC. The same zero timeout on a shared `Recv` returns `WouldBlock` and aborts
+nothing. A module built with upstream `strip.py` has no `HOMAIOCABORT`, so
+cancellation and private-timeout abort return `InvalidArgument` and the RPC
+stays until the kernel's own timeout.
+
+Payloads are copied, not zero-copy. `HomaMessage.Payload` views the native
+copy until `Dispose` and only while the object stays reachable.
+`CopyPayload` returns a `byte[]`. Empty payloads and payloads over
+1 000 000 bytes are rejected before the native call.
+
+`HomaSocket.GetInfo` returns the fields `homa_socket_info` already exposes
+(port, family, active RPCs, pending buffer pages, bytes available, region
+size). A richer `HOMAIOCINFO` surface is still not exposed.
+
+The project is not packed (`IsPackable` is false; the licence is not
+selected). At runtime the loader checks `HOMA_FFI_PATH`, then
+`runtimes/<rid>/native/libhoma_ffi.so` beside the application, then the
+default `homa_ffi` probe. Non-Linux builds of the native library return
+`HOMA_ERR_UNSUPPORTED_PLATFORM`. Linux without `homa.ko` returns
+`HOMA_ERR_UNAVAILABLE`. Managed tests cover layout, argument checks, ABI
+version 1 and that failed open. They have not exchanged an RPC.

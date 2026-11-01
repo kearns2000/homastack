@@ -1,16 +1,31 @@
 name: dotnet-ci
 
-# Placeholder for Phases 3 and 4. The .NET projects (Homa.NET, Homa.Rpc,
-# Homa.Rpc.Hosting) are not implemented in Phase 1; this workflow only verifies
-# that the solution builds once it exists, and otherwise reports that the .NET
-# phases have not started.
+# Builds libhoma_ffi, then builds and tests Homa.NET.
+# Socket open is expected to fail on the runner (no homa.ko). This does not
+# execute a Homa RPC.
 
 on:
   push:
     branches: [main]
-    paths: ["dotnet/**", ".github/workflows/dotnet-ci.yml"]
+    paths:
+      - "dotnet/**"
+      - "rust/crates/homa-ffi/**"
+      - "rust/crates/homa-rs/**"
+      - "rust/crates/homa-sys/**"
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "rust/rust-toolchain.toml"
+      - ".github/workflows/dotnet-ci.yml"
   pull_request:
-    paths: ["dotnet/**", ".github/workflows/dotnet-ci.yml"]
+    paths:
+      - "dotnet/**"
+      - "rust/crates/homa-ffi/**"
+      - "rust/crates/homa-rs/**"
+      - "rust/crates/homa-sys/**"
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "rust/rust-toolchain.toml"
+      - ".github/workflows/dotnet-ci.yml"
 
 jobs:
   build:
@@ -18,25 +33,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detect solution
-        id: detect
-        run: |
-          if [ -f dotnet/HomaStack.slnx ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::dotnet/HomaStack.slnx not present - Phase 3 (.NET) has not started; nothing to build."
-          fi
+      - name: Install Rust toolchain
+        working-directory: rust
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build libhoma_ffi
+        working-directory: rust
+        run: cargo build --release -p homa-ffi
 
       - uses: actions/setup-dotnet@v4
-        if: steps.detect.outputs.present == 'true'
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore / build / test
-        if: steps.detect.outputs.present == 'true'
+      - name: Test Homa.NET
         working-directory: dotnet
-        run: |
-          dotnet restore HomaStack.slnx
-          dotnet build HomaStack.slnx --no-restore --configuration Release
-          dotnet test HomaStack.slnx --no-build --configuration Release
+        env:
+          HOMA_FFI_PATH: ${{ github.workspace }}/rust/target/release/libhoma_ffi.so
+        run: dotnet test HomaStack.slnx --configuration Release

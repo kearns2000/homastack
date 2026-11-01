@@ -5,10 +5,10 @@
 <p align="center">
   <a href="https://github.com/kearns2000/homastack/actions/workflows/rust-ci.yml"><img src="https://github.com/kearns2000/homastack/actions/workflows/rust-ci.yml/badge.svg?branch=main" alt="rust-ci"></a>
   <a href="https://github.com/kearns2000/homastack/actions/workflows/dotnet-ci.yml"><img src="https://github.com/kearns2000/homastack/actions/workflows/dotnet-ci.yml/badge.svg?branch=main" alt="dotnet-ci"></a>
-  <img src="https://img.shields.io/badge/status-Phase%202%20C%20ABI-0ea5e9" alt="Status: Phase 2 C ABI">
+  <img src="https://img.shields.io/badge/status-Phase%203%20Homa.NET-0ea5e9" alt="Status: Phase 3 Homa.NET">
   <br>
   <img src="https://img.shields.io/badge/rust-1.85%2B%20%7C%20edition%202024-000000?logo=rust" alt="Rust 1.85+, edition 2024">
-  <img src="https://img.shields.io/badge/.NET-10%20%28planned%29-512BD4?logo=dotnet&logoColor=white" alt=".NET 10 planned">
+  <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" alt=".NET 10">
   <img src="https://img.shields.io/badge/platform-Linux%20%2B%20homa.ko-FCC624?logo=linux&logoColor=black" alt="Platform: Linux with homa kernel module">
   <a href="https://github.com/PlatformLab/HomaModule/tree/4bd0275714439da2955670a6c438f6c23304d785"><img src="https://img.shields.io/badge/HomaModule-4bd0275-1f6feb" alt="Pinned HomaModule revision 4bd0275"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-not%20yet%20selected-lightgrey" alt="Licence: not yet selected"></a>
@@ -29,7 +29,7 @@ make it usable from Rust and .NET through a layered design:
 | Safe Rust API | `rust/crates/homa-rs` | **Phase 1 - implemented** |
 | Examples | `rust/examples/echo-server`, `echo-client` | **Phase 1 - implemented** |
 | Stable C ABI | `rust/crates/homa-ffi` (`libhoma_ffi.so`) | **Phase 2 - implemented** |
-| Managed wrapper | `dotnet/src/Homa.NET` | planned (Phase 3) |
+| Managed wrapper | `dotnet/src/Homa.NET` | **Phase 3 - implemented** |
 | RPC framework | `dotnet/src/Homa.Rpc`, `Homa.Rpc.Hosting` | planned (Phase 4) |
 | Userspace Homa in Rust | - | possible future work |
 
@@ -108,8 +108,9 @@ Responsibility split:
   fragment descriptors, reassembling payloads, decoding peer addresses, timeouts
   on top of `MSG_DONTWAIT`/`poll`, and error translation.
 - **C ABI (`homa-ffi`)** - a versioned `extern "C"` adapter over `homa-rs`.
-  It does not talk to the kernel itself. C, C++ and (in Phase 3) .NET consume
-  `libhoma_ffi.so` through `include/homa_ffi.h`.
+  It does not talk to the kernel itself. C, C++ and .NET consume
+  `libhoma_ffi.so` through `include/homa_ffi.h`. `Homa.NET` is that .NET
+  consumer. `Homa.Rpc` is not implemented yet.
 
 More detail in [docs/architecture.md](docs/architecture.md) and
 [docs/native-interop.md](docs/native-interop.md).
@@ -140,7 +141,8 @@ cargo test -p homa-ffi --features header-check
 The native library name is `homa_ffi` (`libhoma_ffi.so` on Linux,
 `libhoma_ffi.dylib` on macOS). Only the `homa_*` symbols listed in
 `homa_ffi.h` are exported (Linux version script / macOS exported-symbols
-list). There is no .NET runtime dependency.
+list). The native library does not depend on the .NET runtime. `Homa.NET`
+loads `homa_ffi` with `LibraryImport` (see [Phase 3](#phase-3-managed-homanet)).
 
 ## Setting up a compatible Linux environment
 
@@ -197,20 +199,21 @@ cmake --build /tmp/ffi-client-build
 | `cargo test -p homa-rs --test kernel_integration -- --ignored --test-threads=1` | **yes** | small RPC, binary payload with NULs, 300 KB / 1 MB multi-page payloads, 200 sequential requests with buffer recycling, completion cookies & shared vs private responses, concurrent requests, no-server and unreachable destinations, receive timeout and shutdown wake-up, cleanup after failures |
 | `cargo test -p homa-ffi --test ffi_kernel -- --ignored --test-threads=1` | **yes** | C ABI against a live module: request/reply, NULs, large payloads, sequential and concurrent RPCs, Rust server + FFI client, timeout/shutdown, handle close |
 | `scripts/run-integration.sh` | **yes** | runs the header checks and both ignored kernel suites and writes a log under `tests/integration/results/` |
+| `dotnet test dotnet/HomaStack.slnx` | no | managed struct layout, argument checks, ABI version and status names against `libhoma_ffi`. `Open` returns unsupported platform or unavailable without `homa.ko`. Set `HOMA_FFI_PATH` if the library is not under `rust/target`. |
 
-Integration tests are `#[ignore]`d so `cargo test` never fails just because
-Homa is absent, and they are never mocked.
+`cargo test` never fails just because Homa is absent: the kernel suites are
+`#[ignore]`d and are never mocked. `dotnet test` does not exchange an RPC
+either. Kernel interoperability is still unverified.
 
 ## Known limitations
 
 - Linux only; requires the out-of-tree module. No fallback transport.
-- Synchronous API. No async runtime integration yet (the fd and the
-  non-blocking primitives are exposed for a future layer).
-- One copy per received message (kernel region → `Vec<u8>`). No zero-copy.
+- The Rust API is synchronous. `Homa.NET` blocks a thread-pool thread for each wait; there is no socket-level async runtime.
+- One copy per received message (kernel region to `Vec<u8>`). No zero-copy. `HomaMessage.Payload` views that copy until dispose.
 - Timeouts for *private* responses are implemented by polling with
-  `MSG_DONTWAIT` and exponential back-off (20 µs → 1 ms), because Homa ignores
+  `MSG_DONTWAIT` and exponential back-off (20 µs to 1 ms), because Homa ignores
   `SO_RCVTIMEO` and private responses do not wake `poll(2)`.
-- `HOMAIOCABORT` (used after a client timeout) exists in the GitHub module but
+- `HOMAIOCABORT` (used after a client timeout, and by `Homa.NET` when a private wait is cancelled) exists in the GitHub module but
   not in the stripped variant prepared for upstream Linux; there the abort is a
   no-op and the RPC lingers until the kernel's own timeout.
 - Receive-region minimum size depends on the kernel's `nr_cpu_ids`; the default
@@ -241,16 +244,51 @@ It is an interoperability adapter, not a second transport. The public contract
 is `rust/crates/homa-ffi/include/homa_ffi.h`; the Linux shared library is
 `libhoma_ffi.so`. ABI version `1`. The implementation is synchronous. See
 [docs/native-interop.md](docs/native-interop.md) for every exported function,
-ownership rules, error codes, and the planned .NET `LibraryImport` mapping.
+ownership rules, error codes, and the .NET `LibraryImport` mapping.
 
 Kernel interoperability of this layer has **not** been executed on a live
 Homa host (same situation as Phase 1). Compilation, unit tests, C-header
 layout checks and cross-compilation are what this development machine can
 verify.
 
-## Roadmap: .NET
+## Phase 3: managed Homa.NET
 
-Phase 3 adds `Homa.NET`, which consumes `libhoma_ffi.so` through
-`LibraryImport` with a `SafeHandle`. Phase 4 layers `Homa.Rpc` (serialization,
-dispatch, cancellation) and `Homa.Rpc.Hosting` (DI/`IHostedService`) on top.
-The mapping is detailed in [docs/native-interop.md](docs/native-interop.md).
+Phase 3 is a **.NET 10 wrapper over `libhoma_ffi`**. The RPC framework
+(`Homa.Rpc` and `Homa.Rpc.Hosting`) stays Phase 4. Public types live in the
+`Homa` namespace: `HomaSocket`, `HomaClient`, `HomaMessage` and
+`HomaException`. Sockets and messages are `SafeHandle`s. Payloads are spans
+over bytes the native stack already copied.
+
+`RequestAsync` and `RecvResponseAsync` block a thread-pool thread for the
+wait, one wait per call, so different private RPC ids can proceed together.
+Cancelling the token calls `homa_abort_rpc` for that id. A shared `RecvAsync`
+has no id to abort.
+
+```bash
+cd rust && cargo build --release -p homa-ffi
+cd ../dotnet
+export HOMA_FFI_PATH="$PWD/../rust/target/release/libhoma_ffi.so"   # .dylib on macOS
+dotnet test HomaStack.slnx
+```
+
+```csharp
+using System.Net;
+using Homa;
+
+using var client = new HomaClient();
+using var response = client.Request(
+    new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000),
+    "Hello Homa"u8);
+```
+
+On a machine without `homa.ko` the tests check layout, argument validation,
+ABI version 1 and a failed `Open` (`UnsupportedPlatform` on macOS,
+`Unavailable` on Linux). Exchanging an RPC still requires the ignored kernel
+tests, which have not been run.
+
+## Roadmap
+
+Phase 4 layers `Homa.Rpc` (serialization, dispatch, cancellation of an RPC
+call above this transport) and `Homa.Rpc.Hosting` (DI / `IHostedService`) on
+`Homa.NET`. Details of the native contract are in
+[docs/native-interop.md](docs/native-interop.md).

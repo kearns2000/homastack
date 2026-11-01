@@ -2,7 +2,7 @@
 
 ![Status: no results published](https://img.shields.io/badge/results-none%20published-lightgrey)
 ![Rust harness planned](https://img.shields.io/badge/rust-planned-000000?logo=rust)
-![BenchmarkDotNet planned](https://img.shields.io/badge/BenchmarkDotNet-Phase%203%2B-512BD4?logo=dotnet&logoColor=white)
+![BenchmarkDotNet planned](https://img.shields.io/badge/BenchmarkDotNet-not%20started-512BD4?logo=dotnet&logoColor=white)
 
 Reserved for latency/throughput benchmarks.
 
@@ -10,7 +10,7 @@ Reserved for latency/throughput benchmarks.
   comparing `homa-rs` round trips against the upstream `cp_node` numbers and
   against TCP on the same hosts. Phase 1 ships only the ad-hoc statistics in
   `rust/examples/echo-client` (`--iterations N`).
-- `dotnet/` - Phase 3+ (BenchmarkDotNet).
+- `dotnet/` - BenchmarkDotNet, not started.
 
 Any numbers published here must state the kernel version, HomaModule revision,
 NIC, MTU, whether `homa_prio` and the Homa qdisc were active, and whether the
