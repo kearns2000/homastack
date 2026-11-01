@@ -18,10 +18,10 @@ fn main() {
             let map = manifest.join("homa_ffi.map");
             let linker = write_linux_linker(&map);
             // rustc always adds its own anonymous --version-script for a
-            // cdylib. GNU ld 2.46 (aarch64-linux-gnu-ld on current Ubuntu)
-            // errors with "anonymous version tag cannot be combined with
-            // other version tags" when that script is combined with the
-            // named HOMA_FFI_1 script. The wrapper drops rustc's script.
+            // cdylib. GNU ld 2.46 errors when that is combined with the named
+            // HOMA_FFI_1 script. This wrapper drops rustc's script.
+            // CARGO_TARGET_<triple>_LINKER overrides rustc-linker, so the
+            // aarch64 CI job sets that variable to link-linux.sh instead.
             println!("cargo:rustc-linker={}", linker.display());
             println!(
                 "cargo:rustc-cdylib-link-arg=-Wl,--version-script={}",

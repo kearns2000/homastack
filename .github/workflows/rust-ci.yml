@@ -108,7 +108,9 @@ jobs:
       - name: Cross-compile libhoma_ffi.so
         run: cargo build --release -p homa-ffi --target ${{ matrix.target }}
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          # This env var overrides cargo:rustc-linker. Point it at the wrapper
+          # so rustc's anonymous version script is not passed to ld.bfd 2.46.
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ github.workspace }}/rust/crates/homa-ffi/link-linux.sh
 
   # Kernel integration tests need a host with homa.ko loaded; GitHub-hosted
   # runners cannot load out-of-tree modules. Run on a self-hosted runner
