@@ -296,10 +296,16 @@ bytes. `BytesRpcSerializer` carries a string or a `byte[]`. `JsonRpcSerializer`
 uses UTF-8 JSON with camelCase property names.
 
 `HomaRpcClient.CallAsync` cancels through `Homa.NET`, which aborts that private
-RPC. A timeout is `RpcStatus.Timeout`, not cancellation. `HomaRpcServer` replies
-to shared receives; stopping it calls `Shutdown` because a shared receive has no
-id to abort. Middleware runs outside-in. `Homa.Rpc.Hosting` registers the
-pipeline in DI, opens a scope per call, and runs the server as an `IHostedService`.
+RPC. A timeout is `RpcStatus.Timeout`, not cancellation. A null timeout waits
+30 seconds (`HomaRpcClient.DefaultCallTimeout`); `Timeout.InfiniteTimeSpan`
+waits without a deadline. `HomaRpcServer` runs each handler on the thread pool,
+at most 128 at a time, and replies to shared receives. A reply the transport
+rejects is counted and raised on `TransportFailed`. Stopping the server calls
+`Shutdown` because a shared receive has no id to abort. If the receive loop
+fails, the hosted service logs it and stops the host. Middleware runs
+outside-in. The response is serialized before the per-call DI scope is
+disposed, and request logging records that outcome. `Homa.Rpc.Hosting`
+registers the pipeline in DI and runs the server as an `IHostedService`.
 
 ```csharp
 using System.Net;

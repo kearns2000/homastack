@@ -65,9 +65,11 @@ if the `CancellationToken` fires. `HomaSocket` is the full surface (`Bind`,
 
 A call is one Homa request. The payload is a version-1 frame (ASCII `HOMA`,
 method name, status, serializer bytes). `HomaRpcClient.CallAsync` cancels
-through `Homa.NET`. `HomaRpcServer` replies to shared receives. Hosting
-registers handlers in DI and runs the server as an `IHostedService`.
-`Bind` and `HomaRpcCaller.Open` need `homa.ko`.
+through `Homa.NET`. A null timeout waits 30 seconds. `HomaRpcServer` runs
+handlers on the thread pool, 128 at a time, and replies to shared receives.
+Hosting registers handlers in DI, serializes the response inside the call
+scope, and runs the server as an `IHostedService`. `Bind` and
+`HomaRpcCaller.Open` need `homa.ko`.
 
 ```csharp
 using System.Net;

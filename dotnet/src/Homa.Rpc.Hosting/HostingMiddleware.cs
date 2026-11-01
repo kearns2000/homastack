@@ -6,7 +6,9 @@ namespace Homa.Rpc.Hosting;
 
 /// <summary>
 /// Writes one line when a call enters the pipeline and one when it leaves.
-/// Created once and shared across calls.
+/// The leaving line runs after the response has been serialized, so a
+/// serialization failure is logged with its status. Created once and shared
+/// across calls.
 /// </summary>
 public sealed class LoggingRpcMiddleware : IRpcMiddleware
 {
@@ -42,7 +44,7 @@ public sealed class LoggingRpcMiddleware : IRpcMiddleware
 /// <summary>
 /// Opens a dependency-injection scope for one call and stores its
 /// <see cref="IServiceProvider"/> on <see cref="RpcContext.Items"/>.
-/// The scope ends when the handler and the inner middleware return.
+/// The pipeline serializes the response before this scope is disposed.
 /// </summary>
 public sealed class ScopeRpcMiddleware : IRpcMiddleware
 {

@@ -48,6 +48,22 @@ public class ClientTests
     }
 
     [Fact]
+    public async Task A_null_timeout_uses_the_default_deadline()
+    {
+        var caller = new ScriptedCaller
+        {
+            Handle = (_, _) => new ValueTask<ReadOnlyMemory<byte>>(new byte[] { 1, 2, 3 }),
+        };
+        var client = new HomaRpcClient(caller, new BytesRpcSerializer());
+
+        await Assert.ThrowsAsync<RpcException>(() =>
+            client.CallAsync<string, string>(Echo.Peer, "echo", "x").AsTask());
+
+        Assert.Equal(HomaRpcClient.DefaultCallTimeout, caller.LastTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(30), caller.LastTimeout);
+    }
+
+    [Fact]
     public async Task Payload_over_the_homa_limit_fails_before_the_transport()
     {
         var caller = new ScriptedCaller();

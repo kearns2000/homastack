@@ -13,6 +13,7 @@ public sealed class HomaRpcServerHostedService : IHostedService, IDisposable
     private readonly RpcPipeline _pipeline;
     private readonly HomaRpcServerBinding _binding;
     private readonly ILogger<HomaRpcServerHostedService> _logger;
+    private readonly IHostApplicationLifetime _lifetime;
     private readonly CancellationTokenSource _stop = new();
     private HomaRpcServer? _server;
     private Task? _loop;
@@ -23,26 +24,55 @@ public sealed class HomaRpcServerHostedService : IHostedService, IDisposable
     public HomaRpcServerHostedService(
         RpcPipeline pipeline,
         HomaRpcServerBinding binding,
-        ILogger<HomaRpcServerHostedService> logger)
+        ILogger<HomaRpcServerHostedService> logger,
+        IHostApplicationLifetime lifetime)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(lifetime);
         _pipeline = pipeline;
         _binding = binding;
         _logger = logger;
+        _lifetime = lifetime;
     }
 
     /// <summary>Binds the endpoint and starts the receive loop.</summary>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _server = HomaRpcServer.Bind(_binding.Listen, _pipeline, _binding.SocketOptions);
+        _server = HomaRpcServer.Bind(
+            _binding.Listen,
+            _pipeline,
+            _binding.SocketOptions,
+            _binding.MaxInFlight);
+        _server.TransportFailed += OnTransportFailed;
         _loop = _server.RunAsync(_stop.Token);
+        ObserveLoop(_loop);
         _logger.LogInformation(
             "Homa RPC server listening on {Address}:{Port}.",
             _binding.Listen.Address,
             _binding.Listen.Port);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// When the receive loop faults, stop the host. Reply failures are logged
+    /// from <see cref="HomaRpcServer.TransportFailed"/> and do not fault the loop.
+    /// </summary>
+    internal void ObserveLoop(Task loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        _ = loop.ContinueWith(
+            finished =>
+            {
+                if (!finished.IsFaulted || Volatile.Read(ref _stopped) != 0)
+                    return;
+                _ = finished.Exception;
+                _lifetime.StopApplication();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     /// <summary>Cancels handlers, wakes the receive, and closes a socket this service opened.</summary>
@@ -61,8 +91,14 @@ public sealed class HomaRpcServerHostedService : IHostedService, IDisposable
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
+            catch (Exception) when (_loop.IsFaulted)
+            {
+                // TransportFailed already logged the receive error.
+            }
         }
 
+        if (_server is not null)
+            _server.TransportFailed -= OnTransportFailed;
         _server?.Dispose();
         _logger.LogInformation("Homa RPC server stopped.");
     }
@@ -81,7 +117,18 @@ public sealed class HomaRpcServerHostedService : IHostedService, IDisposable
         }
 
         _server?.Shutdown();
+        if (_server is not null)
+            _server.TransportFailed -= OnTransportFailed;
         _server?.Dispose();
         _stop.Dispose();
+    }
+
+    private void OnTransportFailed(object? sender, RpcTransportFailure failure)
+    {
+        _logger.LogError(
+            failure.Exception,
+            "Homa RPC {Operation} failed for rpc {RpcId}.",
+            failure.Operation,
+            failure.RpcId);
     }
 }

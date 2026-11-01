@@ -147,16 +147,23 @@ The whole frame has to fit in 1 000 000 bytes. `BytesRpcSerializer` accepts a
 string or a `byte[]`. `JsonRpcSerializer` uses `JsonSerializerDefaults.Web`.
 
 `RpcPipeline` decodes the frame, runs middleware outside-in, then the handler.
-A handler exception becomes `HandlerFault` with the exception message and no
-stack. An already-cancelled token skips middleware and the handler and returns
-`Cancelled`. `HomaRpcClient` turns that status into `OperationCanceledException`
-only when its own token is cancelled. A transport deadline is `Timeout`.
+The response is serialized after `Use` middleware and before leading middleware,
+so a per-call scope is still alive and request logging sees a serialization
+failure. A handler exception becomes `HandlerFault` with the exception message
+and no stack. An already-cancelled token skips middleware and the handler and
+returns `Cancelled`. `HomaRpcClient` turns that status into
+`OperationCanceledException` only when its own token is cancelled. A null
+timeout waits 30 seconds. `Timeout.InfiniteTimeSpan` has no deadline. A
+transport deadline is `Timeout`.
 
-`HomaRpcServer.RunAsync` receives shared requests and replies on a separate
-task per request. `Homa.Rpc.Hosting` registers the pipeline, logs each call,
-opens an `IServiceScope` for the call (`RpcContext.GetRequestServices`), and
-hosts the server. `StartAsync` is the call that binds a socket. Diagnostics use
-`ActivitySource` `Homa.Rpc` and `RpcMetrics`.
+`HomaRpcServer.RunAsync` waits for one of 128 handler slots, then runs that
+handler on the thread pool and returns to the next receive. A rejected reply
+increments `RpcMetrics.ReplyFailures` and raises `TransportFailed`. A failed
+receive faults the loop; `HomaRpcServerHostedService` logs it and stops the
+host. Hosting registers the pipeline, logs each call, opens an `IServiceScope`
+for the call (`RpcContext.GetRequestServices`), and hosts the server.
+`StartAsync` is the call that binds a socket. Diagnostics use `ActivitySource`
+`Homa.Rpc` and `RpcMetrics`.
 
 `HomaRpcCaller.Open`, `HomaRpcServer.Bind` and the hosted service's `StartAsync`
 need `homa.ko`. Those paths have not been executed.

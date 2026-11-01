@@ -147,6 +147,23 @@ public class DispatchTests
     }
 
     [Fact]
+    public async Task Serialization_failure_is_visible_to_leading_middleware()
+    {
+        var seen = new List<RpcStatus>();
+        var serializer = new ExplodingSerializer();
+        var pipeline = new RpcPipelineBuilder()
+            .Map<string, string>("echo", (_, _) => new ValueTask<string>("explode"))
+            .Build(serializer, [new StatusProbe(seen)]);
+        var client = new HomaRpcClient(new PipelineCaller(pipeline), serializer);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            client.CallAsync<string, string>(Echo.Peer, "echo", "ping").AsTask());
+
+        Assert.Equal(RpcStatus.HandlerFault, ex.Status);
+        Assert.Equal([RpcStatus.HandlerFault], seen);
+    }
+
+    [Fact]
     public void Rejects_a_duplicate_or_empty_method()
     {
         var builder = new RpcPipelineBuilder()
@@ -175,6 +192,31 @@ public class DispatchTests
     private static string EncodingOf(byte[] utf8) => System.Text.Encoding.UTF8.GetString(utf8);
 
     private sealed record EchoBody(string Text);
+
+    private sealed class StatusProbe(List<RpcStatus> seen) : IRpcMiddleware
+    {
+        public async ValueTask InvokeAsync(RpcInvocation invocation, RpcDispatchDelegate next)
+        {
+            await next(invocation);
+            seen.Add(invocation.Status);
+        }
+    }
+
+    private sealed class ExplodingSerializer : IRpcSerializer
+    {
+        private readonly BytesRpcSerializer _inner = new();
+
+        public string Name => "explode";
+
+        public byte[] Serialize<T>(T value)
+        {
+            if (value is string text && text == "explode")
+                throw new InvalidOperationException("serialize failed");
+            return _inner.Serialize(value);
+        }
+
+        public T Deserialize<T>(ReadOnlySpan<byte> payload) => _inner.Deserialize<T>(payload);
+    }
 
     private sealed class ShortMiddleware(List<string> steps) : IRpcMiddleware
     {

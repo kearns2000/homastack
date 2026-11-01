@@ -9,11 +9,17 @@ namespace Homa.Rpc.Hosting;
 public sealed class HomaRpcServerBinding
 {
     /// <summary>Stores the listen endpoint. <see cref="Homa.HomaSocket.Bind"/> rejects port 0 and ports above 32767.</summary>
-    public HomaRpcServerBinding(IPEndPoint listen, Homa.HomaSocketOptions? socketOptions = null)
+    public HomaRpcServerBinding(
+        IPEndPoint listen,
+        Homa.HomaSocketOptions? socketOptions = null,
+        int maxInFlight = HomaRpcServer.DefaultMaxInFlight)
     {
         ArgumentNullException.ThrowIfNull(listen);
+        if (maxInFlight < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxInFlight), "At least one in-flight RPC is required.");
         Listen = listen;
         SocketOptions = socketOptions;
+        MaxInFlight = maxInFlight;
     }
 
     /// <summary>Local endpoint passed to <see cref="HomaRpcServer.Bind"/>.</summary>
@@ -21,6 +27,9 @@ public sealed class HomaRpcServerBinding
 
     /// <summary>Socket options. Null lets the bind endpoint choose the address family.</summary>
     public Homa.HomaSocketOptions? SocketOptions { get; }
+
+    /// <summary>Handler cap passed to <see cref="HomaRpcServer.Bind"/>.</summary>
+    public int MaxInFlight { get; }
 }
 
 /// <summary>

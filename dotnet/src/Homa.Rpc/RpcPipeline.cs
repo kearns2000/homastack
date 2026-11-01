@@ -70,6 +70,11 @@ public sealed class RpcMetrics
     /// <summary>Server dispatches whose status was not <see cref="RpcStatus.Ok"/>.</summary>
     public long ServerFailures => Interlocked.Read(ref _serverFailures);
 
+    private long _replyFailures;
+
+    /// <summary>Replies the server tried to send and the transport rejected.</summary>
+    public long ReplyFailures => Interlocked.Read(ref _replyFailures);
+
     internal void AddClient(RpcStatus status)
     {
         Interlocked.Increment(ref _clientCalls);
@@ -83,6 +88,8 @@ public sealed class RpcMetrics
         if (status != RpcStatus.Ok)
             Interlocked.Increment(ref _serverFailures);
     }
+
+    internal void AddReplyFailure() => Interlocked.Increment(ref _replyFailures);
 }
 
 /// <summary>
@@ -151,6 +158,12 @@ public sealed class RpcInvocation
 
     /// <summary>Failure text sent in the response frame.</summary>
     public string Detail { get; set; } = "";
+
+    /// <summary>
+    /// Encoded response frame. Set after inner middleware returns and before
+    /// leading middleware (the call scope and request logging) unwinds.
+    /// </summary>
+    internal byte[]? ResponseFrame { get; set; }
 }
 
 /// <summary>Continues the rest of the pipeline, ending at the handler.</summary>
@@ -176,7 +189,12 @@ public sealed class RpcPipelineBuilder
     private readonly List<IRpcMiddleware> _middleware = [];
     private bool _built;
 
-    /// <summary>Adds middleware. The first call is the outermost wrapper.</summary>
+    /// <summary>
+    /// Adds middleware inside response serialization. The first call is the
+    /// outermost of this group. Leading middleware passed to <see cref="Build"/>
+    /// stays outside serialization, so a call scope is still alive while the
+    /// response is written and request logging sees a serialization failure.
+    /// </summary>
     public RpcPipelineBuilder Use(IRpcMiddleware middleware)
     {
         ArgumentNullException.ThrowIfNull(middleware);
@@ -211,7 +229,8 @@ public sealed class RpcPipelineBuilder
 
     /// <summary>
     /// Freezes the registrations. <paramref name="leadingMiddleware"/> runs outside
-    /// middleware added with <see cref="Use"/>, still outermost first.
+    /// middleware added with <see cref="Use"/> and outside response serialization,
+    /// still outermost first.
     /// </summary>
     public RpcPipeline Build(
         IRpcSerializer serializer,
@@ -222,13 +241,12 @@ public sealed class RpcPipelineBuilder
         ThrowIfBuilt();
         _built = true;
         var leading = leadingMiddleware ?? Array.Empty<IRpcMiddleware>();
-        var all = new IRpcMiddleware[leading.Count + _middleware.Count];
+        var outer = new IRpcMiddleware[leading.Count];
         for (var i = 0; i < leading.Count; i++)
-            all[i] = leading[i];
-        for (var i = 0; i < _middleware.Count; i++)
-            all[leading.Count + i] = _middleware[i];
+            outer[i] = leading[i];
+        var inner = _middleware.ToArray();
         var methods = new Dictionary<string, RpcMethod>(_methods, StringComparer.Ordinal);
-        return new RpcPipeline(serializer, methods, all, metrics ?? new RpcMetrics());
+        return new RpcPipeline(serializer, methods, outer, inner, metrics ?? new RpcMetrics());
     }
 
     private void ThrowIfBuilt()
@@ -246,17 +264,20 @@ public sealed class RpcPipeline
 {
     private readonly IRpcSerializer _serializer;
     private readonly Dictionary<string, RpcMethod> _methods;
-    private readonly IRpcMiddleware[] _middleware;
+    private readonly IRpcMiddleware[] _outer;
+    private readonly IRpcMiddleware[] _inner;
 
     internal RpcPipeline(
         IRpcSerializer serializer,
         Dictionary<string, RpcMethod> methods,
-        IRpcMiddleware[] middleware,
+        IRpcMiddleware[] outer,
+        IRpcMiddleware[] inner,
         RpcMetrics metrics)
     {
         _serializer = serializer;
         _methods = methods;
-        _middleware = middleware;
+        _outer = outer;
+        _inner = inner;
         Metrics = metrics;
         Serializer = serializer;
     }
@@ -344,35 +365,10 @@ public sealed class RpcPipeline
             {
                 Request = request,
             };
-            await Invoke(method, invocation).ConfigureAwait(false);
-
-            var payload = Array.Empty<byte>();
-            if (invocation.Status == RpcStatus.Ok)
-            {
-                try
-                {
-                    payload = method.Write(_serializer, invocation.Response);
-                }
-                catch (Exception ex)
-                {
-                    invocation.Status = RpcStatus.HandlerFault;
-                    invocation.Detail = Describe(ex);
-                    payload = [];
-                }
-            }
-
+            await Invoke(method, invocation, methodName).ConfigureAwait(false);
             status = invocation.Status;
             detail = invocation.Detail;
-            try
-            {
-                return RpcFrame.Encode(RpcFrameKind.Response, status, methodName, detail, payload);
-            }
-            catch (RpcException ex) when (ex.Status == RpcStatus.PayloadTooLarge)
-            {
-                status = RpcStatus.PayloadTooLarge;
-                detail = ex.Detail;
-                return Fault(methodName, status, detail);
-            }
+            return invocation.ResponseFrame ?? Fault(methodName, status, detail);
         }
         catch (Exception ex)
         {
@@ -388,7 +384,7 @@ public sealed class RpcPipeline
         }
     }
 
-    private async ValueTask Invoke(RpcMethod method, RpcInvocation invocation)
+    private async ValueTask Invoke(RpcMethod method, RpcInvocation invocation, string methodName)
     {
         RpcDispatchDelegate chain = async current =>
         {
@@ -416,12 +412,14 @@ public sealed class RpcPipeline
             }
         };
 
-        for (var i = _middleware.Length - 1; i >= 0; i--)
+        chain = WrapAll(_inner, chain);
+        var handlerAndInner = chain;
+        chain = async current =>
         {
-            var next = chain;
-            var middleware = _middleware[i];
-            chain = current => middleware.InvokeAsync(current, next);
-        }
+            await handlerAndInner(current).ConfigureAwait(false);
+            current.ResponseFrame = EncodeResponse(method, methodName, current);
+        };
+        chain = WrapAll(_outer, chain);
 
         try
         {
@@ -432,11 +430,73 @@ public sealed class RpcPipeline
             invocation.Status = RpcStatus.Cancelled;
             if (invocation.Detail.Length == 0)
                 invocation.Detail = "The request was cancelled.";
+            invocation.ResponseFrame = null;
         }
         catch (Exception ex)
         {
             invocation.Status = RpcStatus.HandlerFault;
             invocation.Detail = Describe(ex);
+            invocation.ResponseFrame = null;
+        }
+    }
+
+    private static RpcDispatchDelegate WrapAll(IRpcMiddleware[] middleware, RpcDispatchDelegate chain)
+    {
+        for (var i = middleware.Length - 1; i >= 0; i--)
+        {
+            var next = chain;
+            var current = middleware[i];
+            chain = invocation => current.InvokeAsync(invocation, next);
+        }
+
+        return chain;
+    }
+
+    /// <summary>
+    /// Writes the response while inner middleware has returned and leading
+    /// middleware has not. A serialization failure updates <paramref name="invocation"/>
+    /// before the call scope is disposed and before request logging records the outcome.
+    /// </summary>
+    private byte[] EncodeResponse(RpcMethod method, string methodName, RpcInvocation invocation)
+    {
+        var payload = Array.Empty<byte>();
+        if (invocation.Status == RpcStatus.Ok)
+        {
+            try
+            {
+                payload = method.Write(_serializer, invocation.Response);
+            }
+            catch (RpcException ex) when (ex.Status == RpcStatus.PayloadTooLarge)
+            {
+                invocation.Status = RpcStatus.PayloadTooLarge;
+                invocation.Detail = ex.Detail;
+            }
+            catch (Exception ex)
+            {
+                invocation.Status = RpcStatus.HandlerFault;
+                invocation.Detail = Describe(ex);
+            }
+        }
+
+        try
+        {
+            return RpcFrame.Encode(
+                RpcFrameKind.Response,
+                invocation.Status,
+                methodName,
+                invocation.Detail,
+                payload);
+        }
+        catch (RpcException ex) when (ex.Status == RpcStatus.PayloadTooLarge)
+        {
+            invocation.Status = RpcStatus.PayloadTooLarge;
+            invocation.Detail = ex.Detail;
+            return RpcFrame.Encode(
+                RpcFrameKind.Response,
+                invocation.Status,
+                methodName,
+                invocation.Detail,
+                []);
         }
     }
 

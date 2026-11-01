@@ -4,6 +4,7 @@ using Homa.Rpc.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Homa.Rpc.Tests;
 
@@ -15,6 +16,7 @@ public class HostingTests
         var steps = new List<string>();
         var services = new ServiceCollection();
         services.AddSingleton(steps);
+        services.AddSingleton<IHostApplicationLifetime>(new TestLifetime());
         services.AddLogging(logging =>
         {
             logging.AddProvider(new CollectingLoggerProvider(steps));
@@ -55,6 +57,7 @@ public class HostingTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IHostApplicationLifetime>(new TestLifetime());
         services.AddHomaRpc(rpc => rpc.DisableRequestLogging().Map<string, string>("echo", (text, _) => new ValueTask<string>(text)));
         services.AddHomaRpcServer(new IPEndPoint(IPAddress.IPv6Loopback, 4001));
 
@@ -64,6 +67,65 @@ public class HostingTests
         Assert.IsType<HomaRpcServerHostedService>(hosted);
         var binding = provider.GetRequiredService<HomaRpcServerBinding>();
         Assert.Equal(4001, binding.Listen.Port);
+        Assert.Equal(HomaRpcServer.DefaultMaxInFlight, binding.MaxInFlight);
+    }
+
+    [Fact]
+    public async Task Response_serialization_runs_before_the_call_scope_is_disposed()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IHostApplicationLifetime>(new TestLifetime());
+        services.AddScoped<Probe>();
+        services.AddHomaRpc(rpc =>
+        {
+            rpc.Map<string, TouchResponse>("touch", (_, context) =>
+            {
+                var probe = context.GetRequestServices()!.GetRequiredService<Probe>();
+                return new ValueTask<TouchResponse>(new TouchResponse(probe));
+            });
+        });
+        services.AddSingleton<IRpcCaller>(sp => new PipelineCaller(sp.GetRequiredService<RpcPipeline>()));
+        services.AddHomaRpcClient();
+
+        using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<HomaRpcClient>();
+
+        var reply = await client.CallAsync<string, TouchBody>(Echo.Peer, "touch", "x");
+
+        Assert.Equal("live", reply.Text);
+    }
+
+    [Fact]
+    public void A_faulted_receive_loop_stops_the_host()
+    {
+        var lifetime = new TestLifetime();
+        var hosted = new HomaRpcServerHostedService(
+            Echo.Pipeline(),
+            new HomaRpcServerBinding(new IPEndPoint(IPAddress.Loopback, 9)),
+            NullLogger<HomaRpcServerHostedService>.Instance,
+            lifetime);
+        var loop = Task.FromException(new InvalidOperationException("recv failed"));
+
+        hosted.ObserveLoop(loop);
+
+        Assert.True(lifetime.Stop.Wait(TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public void A_rejected_reply_is_counted_and_raised()
+    {
+        var server = new HomaRpcServer(Echo.Pipeline());
+        RpcTransportFailure? reported = null;
+        server.TransportFailed += (_, failure) => reported = failure;
+
+        server.ReportTransportFailure("reply", 9, new InvalidOperationException("send failed"));
+
+        Assert.Equal(1, server.Pipeline.Metrics.ReplyFailures);
+        Assert.NotNull(reported);
+        Assert.Equal("reply", reported.Operation);
+        Assert.Equal(9UL, reported.RpcId);
+        Assert.Equal("send failed", reported.Exception.Message);
     }
 
     private sealed class Tick
@@ -83,6 +145,37 @@ public class HostingTests
             await next(invocation);
             _steps.Add("mark-after");
         }
+    }
+
+    private sealed class Probe : IDisposable
+    {
+        public bool Disposed { get; private set; }
+
+        public string Value => Disposed ? throw new ObjectDisposedException(nameof(Probe)) : "live";
+
+        public void Dispose() => Disposed = true;
+    }
+
+    private sealed class TouchResponse(Probe probe)
+    {
+        public string Text => probe.Value;
+    }
+
+    private sealed record TouchBody(string Text);
+
+    private sealed class TestLifetime : IHostApplicationLifetime
+    {
+        private readonly ManualResetEventSlim _stop = new();
+
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => CancellationToken.None;
+
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public ManualResetEventSlim Stop => _stop;
+
+        public void StopApplication() => _stop.Set();
     }
 
     private sealed class CollectingLoggerProvider(List<string> steps) : ILoggerProvider

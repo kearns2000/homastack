@@ -13,10 +13,18 @@ namespace Homa.Rpc;
 /// before the caller is contacted. A token cancelled during
 /// <see cref="HomaRpcCaller"/> aborts that private RPC. Timeout is
 /// <see cref="RpcStatus.Timeout"/>, not cancellation.
-/// A cancelled token is not recorded in <see cref="Metrics"/> until the call has started.
+/// A null timeout uses <see cref="DefaultCallTimeout"/>. <see cref="Timeout.InfiniteTimeSpan"/>
+/// waits without a deadline. A cancelled token is not recorded in <see cref="Metrics"/>
+/// until the call has started.
 /// </remarks>
 public sealed class HomaRpcClient : IDisposable, IAsyncDisposable
 {
+    /// <summary>
+    /// Deadline used when <see cref="CallAsync{TRequest, TResponse}"/> is given a null timeout.
+    /// Pass <see cref="Timeout.InfiniteTimeSpan"/> to wait without a deadline.
+    /// </summary>
+    public static readonly TimeSpan DefaultCallTimeout = TimeSpan.FromSeconds(30);
+
     private readonly IRpcCaller _caller;
     private readonly IRpcSerializer _serializer;
     private readonly bool _disposeCaller;
@@ -47,7 +55,9 @@ public sealed class HomaRpcClient : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Encodes <paramref name="request"/>, waits for a response frame, and decodes it.
-    /// <paramref name="timeout"/> null waits without a deadline. Zero is one non-blocking transport attempt.
+    /// <paramref name="timeout"/> null uses <see cref="DefaultCallTimeout"/>.
+    /// <see cref="Timeout.InfiniteTimeSpan"/> waits without a deadline.
+    /// Zero is one non-blocking transport attempt.
     /// </summary>
     public async ValueTask<TResponse> CallAsync<TRequest, TResponse>(
         IPEndPoint destination,
@@ -58,7 +68,8 @@ public sealed class HomaRpcClient : IDisposable, IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(destination);
         method = RpcFrame.RequireMethod(method);
-        RpcFrame.CheckTimeout(timeout);
+        var effectiveTimeout = timeout ?? DefaultCallTimeout;
+        RpcFrame.CheckTimeout(effectiveTimeout);
         cancellationToken.ThrowIfCancellationRequested();
 
         var status = RpcStatus.Ok;
@@ -80,7 +91,7 @@ public sealed class HomaRpcClient : IDisposable, IAsyncDisposable
             ReadOnlyMemory<byte> responseBytes;
             try
             {
-                responseBytes = await _caller.CallAsync(destination, frame, timeout, cancellationToken)
+                responseBytes = await _caller.CallAsync(destination, frame, effectiveTimeout, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (Homa.HomaException ex) when (ex.Status == Homa.HomaStatus.Timeout)
