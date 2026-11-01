@@ -234,8 +234,8 @@ copy until `Dispose` and only while the object stays reachable.
 (port, family, active RPCs, pending buffer pages, bytes available, region
 size). A richer `HOMAIOCINFO` surface is still not exposed.
 
-The project is not packed (`IsPackable` is false; the licence is not
-selected). At runtime the loader checks `HOMA_FFI_PATH`, then
+The project is not packed (`IsPackable` is false). HomaStack is MIT.
+At runtime the loader checks `HOMA_FFI_PATH`, then
 `runtimes/<rid>/native/libhoma_ffi.so` beside the application, then the
 default `homa_ffi` probe. Non-Linux builds of the native library return
 `HOMA_ERR_UNSUPPORTED_PLATFORM`. Linux without `homa.ko` returns

@@ -83,6 +83,6 @@ await using var server = HomaRpcServer.Bind(
     new IPEndPoint(IPAddress.Any, 4000), pipeline);
 ```
 
-The packages are not packed. The HomaStack licence has not been selected.
+The packages are not packed. HomaStack is MIT. See [LICENSE](../LICENSE).
 The native contract is [docs/native-interop.md](../docs/native-interop.md).
 The frame is described in [docs/architecture.md](../docs/architecture.md).

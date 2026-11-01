@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" alt=".NET 10">
   <img src="https://img.shields.io/badge/platform-Linux%20%2B%20homa.ko-FCC624?logo=linux&logoColor=black" alt="Platform: Linux with homa kernel module">
   <a href="https://github.com/PlatformLab/HomaModule/tree/4bd0275714439da2955670a6c438f6c23304d785"><img src="https://img.shields.io/badge/HomaModule-4bd0275-1f6feb" alt="Pinned HomaModule revision 4bd0275"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-not%20yet%20selected-lightgrey" alt="Licence: not yet selected"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue" alt="Licence: MIT"></a>
 </p>
 
 An open-source, high-performance RPC and networking stack built with Rust and
@@ -235,8 +235,9 @@ either. Kernel interoperability is still unverified.
   `6f0873de6b1b8cd060c21735c04de1fb9a27c693`, ISC licence. Consulted for
   architecture only; its wire protocol predates the kernel module and was not
   used.
-- **HomaStack's own licence has not been chosen yet.** See [LICENSE](LICENSE)
-  for the decision that is needed and the constraints from upstream.
+- HomaStack itself is [MIT](LICENSE), copyright Patrick Kearns. The vendored
+  `homa.h` and its man pages stay under the BSD-2-Clause notice above and are
+  not relicensed.
 
 ## Phase 2: native C ABI
 
@@ -326,3 +327,11 @@ frames on `RpcPipeline` directly. No RPC has been exchanged through the kernel.
 A userspace Homa transport, without `homa.ko`, is still future work.
 Details of the native contract underneath this layer are in
 [docs/native-interop.md](docs/native-interop.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Security reports go through [SECURITY.md](SECURITY.md).
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). The vendored Homa header remains BSD-2-Clause.

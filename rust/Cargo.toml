@@ -12,8 +12,8 @@ members = [
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-# NOTE: the repository licence has not been selected yet (see /LICENSE).
-# Crates are marked publish = false until that decision is made.
+license = "MIT"
+# Crates stay unpublished until a release is cut.
 publish = false
 repository = "https://github.com/kearns2000/homastack"
 authors = ["HomaStack contributors"]
