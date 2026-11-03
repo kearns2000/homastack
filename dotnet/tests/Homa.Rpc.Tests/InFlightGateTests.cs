@@ -10,18 +10,20 @@ public class InFlightGateTests
         var gate = new RpcInFlightGate(1);
         Assert.True(await gate.WaitAsync(CancellationToken.None));
 
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var started = new ManualResetEventSlim(false);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var caller = Environment.CurrentManagedThreadId;
         var worker = 0;
         gate.Run(async () =>
         {
             worker = Environment.CurrentManagedThreadId;
-            started.TrySetResult();
+            started.Set();
             await release.Task;
         });
 
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        // Block this thread. Awaiting would return it to the pool, which can
+        // then run the queued work on the same thread and fail the assertion.
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)));
         Assert.NotEqual(caller, worker);
 
         var second = gate.WaitAsync(CancellationToken.None).AsTask();
