@@ -23,9 +23,9 @@ public static class HomaRpcServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers <see cref="HomaRpcServerHostedService"/>. The socket is opened in
-    /// <see cref="Microsoft.Extensions.Hosting.IHostedService.StartAsync"/>, which needs Linux with <c>homa.ko</c>.
-    /// That start has not been executed in this repository.
+    /// Registers <see cref="HomaRpcServerHostedService"/>. <see cref="Microsoft.Extensions.Hosting.IHostedService.StartAsync"/>
+    /// calls <see cref="HomaRpcServer.Bind"/> and <see cref="HomaRpcServer.RunAsync"/>, which need Linux with <c>homa.ko</c>.
+    /// Those calls have been executed on the custom WSL2 kernel recorded in <c>tests/integration/README.md</c>.
     /// </summary>
     public static IServiceCollection AddHomaRpcServer(this IServiceCollection services, IPEndPoint listen, Homa.HomaSocketOptions? socketOptions = null)
     {

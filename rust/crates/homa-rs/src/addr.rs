@@ -2,11 +2,15 @@
 //! used by the kernel.
 //!
 //! Homa accepts `sockaddr_in` for `AF_INET` sockets and `sockaddr_in6` for
-//! `AF_INET6` sockets; the family must match the socket's. This module is
-//! portable (any Unix) so it can be unit-tested without Homa.
+//! `AF_INET6` sockets; the family must match the socket's. [`RawSocketAddr`]
+//! mirrors the host libc layout, so it is compiled only on Unix.
+//! [`AddressFamily`] and [`resolve`] are available on every host.
 
+#[cfg(unix)]
 use core::mem::{size_of, zeroed};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
+#[cfg(unix)]
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
+use std::net::{SocketAddr, ToSocketAddrs};
 
 use crate::error::{HomaError, Result};
 
@@ -21,6 +25,7 @@ pub enum AddressFamily {
 
 impl AddressFamily {
     /// The libc `AF_*` constant.
+    #[cfg(unix)]
     #[must_use]
     pub const fn to_raw(self) -> libc::c_int {
         match self {
@@ -42,12 +47,14 @@ impl AddressFamily {
 /// A `sockaddr_storage` plus the length of the address actually stored.
 ///
 /// Built from a [`SocketAddr`] for `bind`/`sendmsg`, or filled by `recvmsg`.
+#[cfg(unix)]
 #[derive(Clone, Copy)]
 pub struct RawSocketAddr {
     storage: libc::sockaddr_storage,
     len: libc::socklen_t,
 }
 
+#[cfg(unix)]
 impl core::fmt::Debug for RawSocketAddr {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self.to_socket_addr() {
@@ -57,6 +64,7 @@ impl core::fmt::Debug for RawSocketAddr {
     }
 }
 
+#[cfg(unix)]
 impl RawSocketAddr {
     /// Zeroed storage ready to be filled by the kernel.
     #[must_use]
@@ -228,6 +236,7 @@ pub fn resolve<A: ToSocketAddrs>(addr: A, family: Option<AddressFamily>) -> Resu
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn v4_round_trip() {
         let addr: SocketAddr = "192.168.1.20:5001".parse().unwrap();
@@ -241,6 +250,7 @@ mod tests {
         assert_eq!(format!("{raw:?}"), "RawSocketAddr(192.168.1.20:5001)");
     }
 
+    #[cfg(unix)]
     #[test]
     fn v6_round_trip_keeps_scope_and_flow() {
         let addr = SocketAddr::V6(SocketAddrV6::new(
@@ -254,6 +264,7 @@ mod tests {
         assert_eq!(raw.to_socket_addr().unwrap(), addr);
     }
 
+    #[cfg(unix)]
     #[test]
     fn port_is_network_byte_order() {
         let addr: SocketAddr = "10.0.0.1:4660".parse().unwrap();
@@ -268,6 +279,7 @@ mod tests {
         assert_eq!(sin.sin_addr.s_addr.to_ne_bytes(), [10, 0, 0, 1]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn empty_and_wrong_family_are_rejected() {
         let raw = RawSocketAddr::empty();
@@ -299,10 +311,15 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn family_helpers() {
+    fn family_to_raw_matches_libc() {
         assert_eq!(AddressFamily::V4.to_raw(), libc::AF_INET);
         assert_eq!(AddressFamily::V6.to_raw(), libc::AF_INET6);
+    }
+
+    #[test]
+    fn family_helpers() {
         assert_eq!(
             AddressFamily::of(&"[::1]:1".parse().unwrap()),
             AddressFamily::V6

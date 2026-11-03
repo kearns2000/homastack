@@ -15,9 +15,9 @@
 //! * [`ReceiveBuffer::copy_out`] - the single place that reads the region.
 //! * [`BpageQueue`] - bpages owned by the application awaiting return.
 //!
-//! The layout logic is pure and unit-tested on every platform; the region
-//! itself is an anonymous `mmap`, so the copy path is exercised in tests too
-//! (by writing synthetic messages into a region the way the kernel would).
+//! The layout logic is pure and unit-tested on every platform. The region
+//! itself is an anonymous `mmap`, so [`ReceiveBuffer`] and the copy path exist
+//! only on Unix, where tests write synthetic messages the way the kernel would.
 
 use std::sync::Mutex;
 
@@ -157,11 +157,15 @@ impl FragmentLayout {
 }
 
 /// The receive-buffer region owned by one socket.
+///
+/// The mapping is an anonymous `mmap`, so this type exists only on Unix.
+#[cfg(unix)]
 #[derive(Debug)]
 pub struct ReceiveBuffer {
     region: homa_sys::region::MappedRegion,
 }
 
+#[cfg(unix)]
 impl ReceiveBuffer {
     /// Map a region of `bytes` (rounded up to a whole number of bpages).
     ///
@@ -423,6 +427,7 @@ mod tests {
         assert!(FragmentLayout::from_recv_args(&a, HOMA_MAX_MESSAGE_LENGTH, region).is_err());
     }
 
+    #[cfg(unix)]
     #[test]
     fn copy_out_reassembles_multi_page_message_in_order() {
         let buf = ReceiveBuffer::new(8 * BP).unwrap();
@@ -440,6 +445,7 @@ mod tests {
         assert_eq!(buf.copy_out(&layout), message);
     }
 
+    #[cfg(unix)]
     #[test]
     fn copy_out_preserves_null_bytes() {
         let buf = ReceiveBuffer::new(BP).unwrap();
@@ -450,6 +456,7 @@ mod tests {
         assert_eq!(buf.copy_out(&layout), message);
     }
 
+    #[cfg(unix)]
     #[test]
     fn receive_buffer_rounds_up_and_validates() {
         assert!(ReceiveBuffer::new(0).is_err());

@@ -266,20 +266,23 @@ mod tests {
 
     #[test]
     fn maps_rpc_failures_by_kind() {
+        // Linux asm-generic errno values.
+        const ETIMEDOUT: i32 = 110;
+        const ENOTCONN: i32 = 107;
+        const EHOSTUNREACH: i32 = 113;
+        const ESHUTDOWN: i32 = 108;
+        const EIO: i32 = 5;
         let rpc = |errno: i32| HomaError::RpcFailed {
             id: homa_rs::RpcId::from_raw(2),
             completion_cookie: 0,
             source: io::Error::from_raw_os_error(errno),
             detail: None,
         };
-        assert_eq!(status_for_error(&rpc(libc::ETIMEDOUT)), HOMA_ERR_RPC_FAILED);
-        assert_eq!(status_for_error(&rpc(libc::ENOTCONN)), HOMA_ERR_NO_SERVER);
-        assert_eq!(
-            status_for_error(&rpc(libc::EHOSTUNREACH)),
-            HOMA_ERR_UNREACHABLE
-        );
-        assert_eq!(status_for_error(&rpc(libc::ESHUTDOWN)), HOMA_ERR_SHUTDOWN);
-        assert_eq!(status_for_error(&rpc(libc::EIO)), HOMA_ERR_RPC_FAILED);
+        assert_eq!(status_for_error(&rpc(ETIMEDOUT)), HOMA_ERR_RPC_FAILED);
+        assert_eq!(status_for_error(&rpc(ENOTCONN)), HOMA_ERR_NO_SERVER);
+        assert_eq!(status_for_error(&rpc(EHOSTUNREACH)), HOMA_ERR_UNREACHABLE);
+        assert_eq!(status_for_error(&rpc(ESHUTDOWN)), HOMA_ERR_SHUTDOWN);
+        assert_eq!(status_for_error(&rpc(EIO)), HOMA_ERR_RPC_FAILED);
     }
 
     #[test]

@@ -31,8 +31,7 @@ case "$OS" in
   Linux)
     ok "Linux ($(uname -m))"
     if grep -qi microsoft /proc/version 2>/dev/null; then
-      warn "WSL detected. The WSL2 kernel does not ship Homa; a custom WSL kernel build is required. Not supported here."
-      HOMA_OK=0
+      warn "WSL detected. A stock WSL kernel cannot load homa.ko; a custom kernel is required. The socket probe below decides whether this one can."
     fi
     if [[ -f /.dockerenv ]] || grep -qE '(docker|containerd|kubepods)' /proc/1/cgroup 2>/dev/null; then
       warn "Container detected. Homa must be loaded on the *host* kernel; containers cannot insmod. Sockets may still work if the host has Homa."

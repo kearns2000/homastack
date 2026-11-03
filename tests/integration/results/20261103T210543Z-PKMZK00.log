@@ -1,0 +1,140 @@
+# HomaStack kernel integration run
+date_utc: 20261103T210543Z
+host: PKMZK00
+kernel: 6.18.54.1-microsoft-standard-WSL2+ (x86_64)
+homa_module: loaded (version unknown)
+rustc: rustc 1.92.0 (ded5c06cf 2025-12-08)
+git: c48aba7
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running unittests src/lib.rs (/home/kernzy/homa-target/debug/deps/homa_sys-b4cc37ea2dc8f637)
+
+running 7 tests
+test abi::tests::constants_match_header ... ok
+test abi::tests::info_error_message_is_nul_terminated ... ok
+test abi::tests::recvmsg_args_offsets_are_clamped ... ok
+test abi::tests::ioctl_numbers_match_c_encoding ... ok
+test region::tests::maps_and_rounds_up_to_page_size ... ok
+test region::tests::region_is_zeroed_and_writable ... ok
+test region::tests::zero_length_is_rejected ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/header_check.rs (/home/kernzy/homa-target/debug/deps/header_check-faa2ef01113323e2)
+
+running 1 test
+test rust_abi_matches_upstream_header ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+   Doc-tests homa_sys
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling homa-rs v0.1.0 (/mnt/c/Users/patri/source/repos/homastack/rust/crates/homa-rs)
+   Compiling homa-ffi v0.1.0 (/mnt/c/Users/patri/source/repos/homastack/rust/crates/homa-ffi)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.21s
+     Running unittests src/lib.rs (/home/kernzy/homa-target/debug/deps/homa_ffi-8b17805edaa6a566)
+
+running 14 tests
+test errors::tests::copies_message_with_required_length ... ok
+test errors::tests::guard_contains_panics ... ok
+test errors::tests::maps_pure_rust_errors ... ok
+test errors::tests::maps_every_error_kind ... ok
+test errors::tests::maps_rpc_failures_by_kind ... ok
+test errors::tests::last_error_is_thread_local_and_clearable ... ok
+test handles::tests::key_encoding_round_trips_and_null_is_invalid ... ok
+test handles::tests::unknown_keys_are_rejected ... ok
+test tests::abi_version_is_one ... ok
+test messages::tests::payload_pointer_is_stable_until_free ... ok
+test tests::platform_support_matches_build ... ok
+test types::tests::endpoint_rejects_garbage ... ok
+test types::tests::endpoint_round_trips_v4_and_v6 ... ok
+test types::tests::status_names_are_unique_and_known ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ffi_kernel.rs (/home/kernzy/homa-target/debug/deps/ffi_kernel-17600d43348c0651)
+
+running 8 tests
+test binary_payload_with_nuls ... ignored, requires the Homa kernel module (run with --ignored)
+test close_invalidates_handle_and_abort_unknown_id ... ignored, requires the Homa kernel module (run with --ignored)
+test concurrent_requests_on_one_socket ... ignored, requires the Homa kernel module (run with --ignored)
+test large_payload_and_repeated_alloc_free ... ignored, requires the Homa kernel module (run with --ignored)
+test rust_server_serves_ffi_client ... ignored, requires the Homa kernel module (run with --ignored)
+test sequential_private_send_recv ... ignored, requires the Homa kernel module (run with --ignored)
+test small_request_through_c_abi ... ignored, requires the Homa kernel module (run with --ignored)
+test timeout_aborts_and_shutdown_unblocks ... ignored, requires the Homa kernel module (run with --ignored)
+
+test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ffi_tests.rs (/home/kernzy/homa-target/debug/deps/ffi_tests-bbcea79b01f0e73a)
+
+running 15 tests
+test abi_version_is_one_through_the_export ... ok
+test close_of_null_is_ok_unknown_handle_is_invalid ... ok
+test invalid_endpoint_is_rejected_before_the_socket ... ok
+test last_error_copy_reports_required_length ... ok
+test max_message_length_matches_constant ... ok
+test message_free_accepts_null_and_payload_of_null_is_empty ... ok
+test null_and_invalid_arguments_are_rejected ... ok
+test panic_boundary_does_not_unwind ... ok
+test open_on_this_host_is_either_linux_or_unsupported ... ok
+test payload_length_validation ... ok
+test platform_detection_matches_cfg ... ok
+test rust_struct_layouts_match_documented_sizes ... ok
+test status_name_is_static_and_covers_known_codes ... ok
+test header_declares_every_exported_symbol ... ok
+test header_layout_matches ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+   Doc-tests homa_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling homa-rs v0.1.0 (/mnt/c/Users/patri/source/repos/homastack/rust/crates/homa-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running tests/kernel_integration.rs (/home/kernzy/homa-target/debug/deps/kernel_integration-467e7b6f7e4f6873)
+
+running 10 tests
+test binary_payload_with_null_bytes ... ok
+test completion_cookie_and_shared_response ... ok
+test concurrent_requests_on_one_socket ... ok
+test large_payload_spans_multiple_bpages ... ok
+test multiple_sequential_requests_recycle_buffers ... ok
+test recv_timeout_and_shutdown_unblock ... ok
+test request_to_port_without_server_fails ... no-server error after 77.389µs: RPC 818 failed: Transport endpoint is not connected (os error 107) (homa: RPC failed) (kind NoServer)
+ok
+test request_to_unreachable_host_times_out ... unreachable error: RPC 822 failed: Connection timed out (os error 110) (homa: RPC failed) (kind Timeout)
+ok
+test resources_are_released_after_failures ... ok
+test small_request_and_response ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+   Compiling homa-ffi v0.1.0 (/mnt/c/Users/patri/source/repos/homastack/rust/crates/homa-ffi)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.77s
+     Running tests/ffi_kernel.rs (/home/kernzy/homa-target/debug/deps/ffi_kernel-e531ed5c4c6aa964)
+
+running 8 tests
+test binary_payload_with_nuls ... ok
+test close_invalidates_handle_and_abort_unknown_id ... ok
+test concurrent_requests_on_one_socket ... ok
+test large_payload_and_repeated_alloc_free ... ok
+test rust_server_serves_ffi_client ... ok
+test sequential_private_send_recv ... ok
+test small_request_through_c_abi ... ok
+test timeout_aborts_and_shutdown_unblocks ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+
+header_check_exit: 0
+ffi_header_check_exit: 0
+integration_exit: 0
+ffi_kernel_exit: 0

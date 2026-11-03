@@ -461,6 +461,8 @@ impl HomaSocket {
     ///
     /// Implemented with `poll(2)` (which Homa supports for shared messages)
     /// followed by a non-blocking receive, so it does not busy-wait.
+    /// `poll` takes whole milliseconds and may wake before the requested
+    /// timeout, so a short wake is not itself the deadline.
     pub fn recv_timeout(&self, timeout: Duration) -> Result<Option<Message>> {
         let deadline = Instant::now() + timeout;
         loop {
@@ -468,8 +470,13 @@ impl HomaSocket {
             if now >= deadline {
                 return Ok(None);
             }
-            if !self.poll_readable(Some(deadline - now))? {
-                return Ok(None);
+            let remaining = deadline - now;
+            if remaining.as_millis() == 0 {
+                std::thread::sleep(remaining);
+                continue;
+            }
+            if !self.poll_readable(Some(remaining))? {
+                continue;
             }
             // Another thread may have consumed the message between poll and
             // recv; loop in that case.

@@ -42,7 +42,8 @@ public sealed class HomaRpcClient : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Opens a <see cref="HomaRpcCaller"/> and owns it. Needs Linux with <c>homa.ko</c>.
-    /// That open has not been executed in this repository.
+    /// That open has been executed on the custom WSL2 kernel recorded in
+    /// <c>tests/integration/README.md</c>.
     /// </summary>
     public static HomaRpcClient Open(IRpcSerializer? serializer = null, Homa.HomaSocketOptions? options = null) =>
         new(HomaRpcCaller.Open(options), serializer ?? new JsonRpcSerializer(), disposeCaller: true);

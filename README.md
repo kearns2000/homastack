@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" alt=".NET 10">
   <img src="https://img.shields.io/badge/platform-Linux%20%2B%20homa.ko-FCC624?logo=linux&logoColor=black" alt="Platform: Linux with homa kernel module">
   <a href="https://github.com/PlatformLab/HomaModule/tree/4bd0275714439da2955670a6c438f6c23304d785"><img src="https://img.shields.io/badge/HomaModule-4bd0275-1f6feb" alt="Pinned HomaModule revision 4bd0275"></a>
+  <a href="tests/integration/README.md"><img src="https://img.shields.io/badge/kernel%20interop-passed%20on%20WSL%206.18-2ea44f" alt="Kernel interop passed on WSL 6.18"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue" alt="Licence: MIT"></a>
 </p>
 
@@ -56,10 +57,14 @@ asynchronous. Payloads are copied once out of the kernel-managed region into a
 
 > **Integration status:** the code was built, linted and unit-tested on macOS
 > and cross-checked (`cargo clippy`/`cargo doc`) for `x86_64-unknown-linux-gnu`
-> and `aarch64-unknown-linux-gnu`. The kernel integration tests have **not yet
-> been executed** against a live Homa module because the development machine
-> cannot run it. See [tests/integration/README.md](tests/integration/README.md)
-> for the exact procedure and the results log.
+> and `aarch64-unknown-linux-gnu`. The Rust and C ABI kernel tests have since
+> passed on a custom WSL2 kernel, `6.18.54.1-microsoft-standard-WSL2+`, with
+> `homa.ko` loaded: 10 `homa-rs` tests, 8 `homa-ffi` tests, and both header
+> checks. The module was HomaModule `4bd0275` plus a local `recvmsg` change
+> required by Linux 6.18; that change is not in this repository. On that same
+> host a .NET 10 process loaded `libhoma_ffi.so`, bound a socket, and
+> completed a transport request and a `Homa.Rpc` call. See
+> [tests/integration/README.md](tests/integration/README.md).
 
 ## Dependency on the Linux kernel module
 
@@ -202,8 +207,12 @@ cmake --build /tmp/ffi-client-build
 | `dotnet test dotnet/HomaStack.slnx` | no | `Homa.NET`: struct layout, argument checks, ABI version and status names against `libhoma_ffi`. `Open` returns unsupported platform or unavailable without `homa.ko`. `Homa.Rpc`: frame, dispatch, middleware, cancellation and DI, all in memory with no socket. Set `HOMA_FFI_PATH` if the library is not under `rust/target`. |
 
 `cargo test` never fails just because Homa is absent: the kernel suites are
-`#[ignore]`d and are never mocked. `dotnet test` does not exchange an RPC
-either. Kernel interoperability is still unverified.
+`#[ignore]`d and are never mocked. `dotnet test` does not exchange an RPC.
+Rust and C ABI kernel interoperability has been executed once, and a .NET 10
+process on that same host has bound a socket and completed a `Homa.Rpc` call.
+See [tests/integration/README.md](tests/integration/README.md). The hosted
+service's `StartAsync` calls `HomaRpcServer.Bind` and `RunAsync`, which were
+the calls that ran.
 
 ## Known limitations
 
@@ -222,7 +231,7 @@ either. Kernel interoperability is still unverified.
 - ioctl numbers are encoded for the asm-generic layout (x86, arm64, riscv, …);
   the crate refuses to build on powerpc/mips/sparc until that encoding is added.
 - `Homa.Rpc` uses those same thread-pool waits. Its unit tests call an in-memory transport and do not open a socket.
-- Kernel interoperability has not been executed yet (see above).
+- Rust, C ABI, and .NET socket interoperability has been executed on one custom WSL2 kernel (see [tests/integration/README.md](tests/integration/README.md)). Hosted `StartAsync` is that same `HomaRpcServer.Bind` and `RunAsync`.
 
 ## Upstream projects, revisions and licences
 
@@ -248,10 +257,10 @@ is `rust/crates/homa-ffi/include/homa_ffi.h`; the Linux shared library is
 [docs/native-interop.md](docs/native-interop.md) for every exported function,
 ownership rules, error codes, and the .NET `LibraryImport` mapping.
 
-Kernel interoperability of this layer has **not** been executed on a live
-Homa host (same situation as Phase 1). Compilation, unit tests, C-header
-layout checks and cross-compilation are what this development machine can
-verify.
+Kernel interoperability of this layer has been executed on the same host as
+Phase 1 (see [tests/integration/README.md](tests/integration/README.md)). The
+`examples/ffi-client` binary was not built in that run; the `homa-ffi` kernel
+tests cover the exported C ABI.
 
 ## Phase 3: managed Homa.NET
 
@@ -284,9 +293,11 @@ using var response = client.Request(
 ```
 
 On a machine without `homa.ko` the tests check layout, argument validation,
-ABI version 1 and a failed `Open` (`UnsupportedPlatform` on macOS,
-`Unavailable` on Linux). Exchanging an RPC still requires the ignored kernel
-tests, which have not been run.
+ABI version 1 and a failed `Open` (`UnsupportedPlatform` on Windows and macOS,
+`Unavailable` on Linux without the module). Rust and C ABI RPCs use the
+ignored kernel tests, which have been run once (see the integration log).
+On that same host a .NET 10 process has opened a socket and completed a
+`Homa.Rpc` call. Hosted `StartAsync` is that same bind and receive loop.
 
 ## Phase 4: Homa.Rpc
 

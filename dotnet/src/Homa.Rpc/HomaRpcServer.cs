@@ -43,7 +43,8 @@ public sealed class RpcTransportFailure : EventArgs
 /// <see cref="Homa.HomaSocket.Reply"/> then fails, which increments
 /// <see cref="RpcMetrics.ReplyFailures"/> and raises <see cref="TransportFailed"/>.
 /// A module without <c>HOMAIOCABORT</c> cannot abort the caller either.
-/// <see cref="Bind"/> and <see cref="RunAsync"/> have not been executed against <c>homa.ko</c>.
+/// <see cref="Bind"/> and <see cref="RunAsync"/> have been executed against <c>homa.ko</c>
+/// on the custom WSL2 kernel recorded in <c>tests/integration/README.md</c>.
 /// </para>
 /// </remarks>
 public sealed class HomaRpcServer : IDisposable, IAsyncDisposable
@@ -89,7 +90,8 @@ public sealed class HomaRpcServer : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Binds a server socket and owns it. Needs Linux with <c>homa.ko</c>.
-    /// This repository has not executed that bind.
+    /// That bind has been executed on the custom WSL2 kernel recorded in
+    /// <c>tests/integration/README.md</c>.
     /// </summary>
     public static HomaRpcServer Bind(
         IPEndPoint local,

@@ -1,6 +1,6 @@
 # Kernel integration tests
 
-![Kernel interop: not yet executed](https://img.shields.io/badge/kernel%20interop-not%20yet%20executed-red)
+![Kernel interop: passed on WSL 6.18](https://img.shields.io/badge/kernel%20interop-passed%20on%20WSL%206.18-2ea44f)
 ![Platform: Linux + homa.ko](https://img.shields.io/badge/platform-Linux%20%2B%20homa.ko-FCC624?logo=linux&logoColor=black)
 ![cargo test: ignored by default](https://img.shields.io/badge/cargo%20test-%23%5Bignore%5D%20by%20default-000000?logo=rust)
 [![HomaModule 4bd0275](https://img.shields.io/badge/HomaModule-4bd0275-1f6feb)](https://github.com/PlatformLab/HomaModule/tree/4bd0275714439da2955670a6c438f6c23304d785)
@@ -11,8 +11,9 @@ never mocked. The test code lives in
 `rust/crates/homa-ffi/tests/ffi_kernel.rs`. Every test is marked
 `#[ignore]` so that an ordinary `cargo test` does not fail where Homa is
 absent. `dotnet test` checks `Homa.NET` against `libhoma_ffi`, and checks
-`Homa.Rpc` framing and dispatch in memory. Neither exchanges an RPC. Kernel
-interoperability of the Rust and .NET layers has not been executed.
+`Homa.Rpc` framing and dispatch in memory. Neither exchanges an RPC. Rust,
+C ABI, and a separate .NET 10 process have been executed on the host in the
+results log below. Hosted `StartAsync` calls `HomaRpcServer.Bind` and `RunAsync`, which that .NET process ran.
 
 ## Requirements
 
@@ -84,7 +85,11 @@ validates.
 
 | Date (UTC) | Host / kernel | HomaModule rev | Result | Log |
 |------------|---------------|----------------|--------|-----|
-| - | - | - | **not yet executed** - Phase 1 development was done on macOS (no Homa). | - |
+| 2026-11-03 21:05 | PKMZK00 / `6.18.54.1-microsoft-standard-WSL2+` (x86_64) | `4bd0275` plus a local `recvmsg` change for Linux 6.18, not in this repo | pass: 10 `homa-rs` kernel tests, 8 `homa-ffi` kernel tests, both header checks | [20261103T210543Z-PKMZK00.log](results/20261103T210543Z-PKMZK00.log) |
 
-Until a row with a passing result exists here, kernel interoperability of this
-code is **unverified**. Do not report it as working.
+That run covers `homa-rs` and `homa-ffi` on one custom WSL2 kernel. The loaded
+module is not the unmodified pinned tree. On the same host and kernel, a
+.NET 10.0.403 process loaded `libhoma_ffi.so` and completed `HomaSocket.Bind`
+on port 7601, a client `Open` (assigned port 32769), a request/reply
+(`ping` / `pong:ping`), and `HomaRpcServer.Bind` plus `HomaRpcClient.CallAsync`
+(`echo` returned `rpc:hello`). Hosted `StartAsync` performs that same bind and `RunAsync`.

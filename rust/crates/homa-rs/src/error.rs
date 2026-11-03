@@ -13,6 +13,37 @@ use crate::transport::RpcId;
 /// Convenience alias used throughout the crate.
 pub type Result<T> = std::result::Result<T, HomaError>;
 
+/// Linux `asm-generic` errno numbers.
+///
+/// [`classify_errno`] uses these on every host. macOS `libc` uses different
+/// values, and the Windows `libc` crate does not define the socket ones.
+/// Only the Linux socket path observes a real errno.
+mod linux_errno {
+    pub const EPERM: i32 = 1;
+    pub const EINTR: i32 = 4;
+    // Not its own ErrorKind. Named so tests can assert it stays Other,
+    // including on hosts whose libc crate has no EIO.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub const EIO: i32 = 5;
+    pub const EBADF: i32 = 9;
+    pub const EAGAIN: i32 = 11;
+    pub const ENOMEM: i32 = 12;
+    pub const EACCES: i32 = 13;
+    pub const EFAULT: i32 = 14;
+    pub const EINVAL: i32 = 22;
+    pub const ENOPROTOOPT: i32 = 92;
+    pub const EPROTONOSUPPORT: i32 = 93;
+    pub const ESOCKTNOSUPPORT: i32 = 94;
+    pub const EAFNOSUPPORT: i32 = 97;
+    pub const EADDRINUSE: i32 = 98;
+    pub const ENETUNREACH: i32 = 101;
+    pub const ENOBUFS: i32 = 105;
+    pub const ENOTCONN: i32 = 107;
+    pub const ESHUTDOWN: i32 = 108;
+    pub const ETIMEDOUT: i32 = 110;
+    pub const EHOSTUNREACH: i32 = 113;
+}
+
 /// Coarse classification of a [`HomaError`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -151,6 +182,7 @@ fn fmt_detail(detail: &Option<String>) -> String {
 
 impl HomaError {
     /// Build an [`HomaError::Os`] from the current `errno`-derived error.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub(crate) fn os(op: &'static str, source: io::Error) -> Self {
         Self::Os {
             op,
@@ -249,18 +281,23 @@ pub fn classify_errno(errno: Option<i32>) -> ErrorKind {
         return ErrorKind::Other;
     };
     match e {
-        // EWOULDBLOCK == EAGAIN on Linux and every other supported Unix.
-        libc::EAGAIN => ErrorKind::WouldBlock,
-        libc::ETIMEDOUT => ErrorKind::Timeout,
-        libc::ESHUTDOWN => ErrorKind::Shutdown,
-        libc::ENOTCONN => ErrorKind::NoServer,
-        libc::EHOSTUNREACH | libc::ENETUNREACH => ErrorKind::Unreachable,
-        libc::EADDRINUSE => ErrorKind::AddressInUse,
-        libc::EACCES | libc::EPERM => ErrorKind::PermissionDenied,
-        libc::ENOMEM | libc::ENOBUFS => ErrorKind::NoMemory,
-        libc::EINTR => ErrorKind::Interrupted,
-        libc::EPROTONOSUPPORT | libc::ESOCKTNOSUPPORT | libc::ENOPROTOOPT => ErrorKind::Unavailable,
-        libc::EINVAL | libc::EFAULT | libc::EAFNOSUPPORT | libc::EBADF => ErrorKind::InvalidInput,
+        // EWOULDBLOCK == EAGAIN on Linux.
+        linux_errno::EAGAIN => ErrorKind::WouldBlock,
+        linux_errno::ETIMEDOUT => ErrorKind::Timeout,
+        linux_errno::ESHUTDOWN => ErrorKind::Shutdown,
+        linux_errno::ENOTCONN => ErrorKind::NoServer,
+        linux_errno::EHOSTUNREACH | linux_errno::ENETUNREACH => ErrorKind::Unreachable,
+        linux_errno::EADDRINUSE => ErrorKind::AddressInUse,
+        linux_errno::EACCES | linux_errno::EPERM => ErrorKind::PermissionDenied,
+        linux_errno::ENOMEM | linux_errno::ENOBUFS => ErrorKind::NoMemory,
+        linux_errno::EINTR => ErrorKind::Interrupted,
+        linux_errno::EPROTONOSUPPORT | linux_errno::ESOCKTNOSUPPORT | linux_errno::ENOPROTOOPT => {
+            ErrorKind::Unavailable
+        }
+        linux_errno::EINVAL
+        | linux_errno::EFAULT
+        | linux_errno::EAFNOSUPPORT
+        | linux_errno::EBADF => ErrorKind::InvalidInput,
         _ => ErrorKind::Other,
     }
 }
@@ -285,41 +322,59 @@ mod tests {
 
     #[test]
     fn errno_classification() {
-        assert_eq!(classify_errno(Some(libc::EAGAIN)), ErrorKind::WouldBlock);
-        assert_eq!(classify_errno(Some(libc::ETIMEDOUT)), ErrorKind::Timeout);
-        assert_eq!(classify_errno(Some(libc::ESHUTDOWN)), ErrorKind::Shutdown);
-        assert_eq!(classify_errno(Some(libc::ENOTCONN)), ErrorKind::NoServer);
         assert_eq!(
-            classify_errno(Some(libc::EHOSTUNREACH)),
+            classify_errno(Some(linux_errno::EAGAIN)),
+            ErrorKind::WouldBlock
+        );
+        assert_eq!(
+            classify_errno(Some(linux_errno::ETIMEDOUT)),
+            ErrorKind::Timeout
+        );
+        assert_eq!(
+            classify_errno(Some(linux_errno::ESHUTDOWN)),
+            ErrorKind::Shutdown
+        );
+        assert_eq!(
+            classify_errno(Some(linux_errno::ENOTCONN)),
+            ErrorKind::NoServer
+        );
+        assert_eq!(
+            classify_errno(Some(linux_errno::EHOSTUNREACH)),
             ErrorKind::Unreachable
         );
         assert_eq!(
-            classify_errno(Some(libc::EADDRINUSE)),
+            classify_errno(Some(linux_errno::EADDRINUSE)),
             ErrorKind::AddressInUse
         );
-        assert_eq!(classify_errno(Some(libc::ENOMEM)), ErrorKind::NoMemory);
-        assert_eq!(classify_errno(Some(libc::EINVAL)), ErrorKind::InvalidInput);
         assert_eq!(
-            classify_errno(Some(libc::EPROTONOSUPPORT)),
+            classify_errno(Some(linux_errno::ENOMEM)),
+            ErrorKind::NoMemory
+        );
+        assert_eq!(
+            classify_errno(Some(linux_errno::EINVAL)),
+            ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            classify_errno(Some(linux_errno::EPROTONOSUPPORT)),
             ErrorKind::Unavailable
         );
-        assert_eq!(classify_errno(Some(libc::EIO)), ErrorKind::Other);
+        assert_eq!(classify_errno(Some(linux_errno::EIO)), ErrorKind::Other);
         assert_eq!(classify_errno(None), ErrorKind::Other);
     }
 
     #[test]
     fn socket_creation_errors_mean_unavailable() {
         assert_eq!(
-            os("socket", libc::EPROTONOSUPPORT).kind(),
+            os("socket", linux_errno::EPROTONOSUPPORT).kind(),
             ErrorKind::Unavailable
         );
         assert_eq!(
-            os("socket", libc::EAFNOSUPPORT).kind(),
+            os("socket", linux_errno::EAFNOSUPPORT).kind(),
             ErrorKind::Unavailable
         );
         // ...but the same errno elsewhere is just bad input.
         assert_eq!(
-            os("sendmsg", libc::EAFNOSUPPORT).kind(),
+            os("sendmsg", linux_errno::EAFNOSUPPORT).kind(),
             ErrorKind::InvalidInput
         );
     }
@@ -329,11 +384,11 @@ mod tests {
         let err = HomaError::RpcFailed {
             id: RpcId::from_raw(42),
             completion_cookie: 7,
-            source: io::Error::from_raw_os_error(libc::ETIMEDOUT),
+            source: io::Error::from_raw_os_error(linux_errno::ETIMEDOUT),
             detail: Some("peer dead".into()),
         };
         assert_eq!(err.kind(), ErrorKind::Timeout);
-        assert_eq!(err.raw_os_error(), Some(libc::ETIMEDOUT));
+        assert_eq!(err.raw_os_error(), Some(linux_errno::ETIMEDOUT));
         let text = err.to_string();
         assert!(text.contains("RPC 42"), "{text}");
         assert!(text.contains("peer dead"), "{text}");
@@ -341,7 +396,7 @@ mod tests {
 
     #[test]
     fn detail_is_attached_once_and_empty_is_dropped() {
-        let err = os("recvmsg", libc::EINVAL).with_detail(Some(String::new()));
+        let err = os("recvmsg", linux_errno::EINVAL).with_detail(Some(String::new()));
         assert!(!err.to_string().contains("homa:"));
         let err = err.with_detail(Some("invalid msg_controllen in recvmsg".into()));
         assert!(err.to_string().contains("homa: invalid msg_controllen"));
@@ -352,16 +407,16 @@ mod tests {
     #[test]
     fn private_wait_abort_policy() {
         let os = |errno| HomaError::os("recvmsg", io::Error::from_raw_os_error(errno));
-        assert!(!os(libc::EINVAL).private_wait_should_abort());
-        assert!(!os(libc::EAGAIN).private_wait_should_abort());
-        assert!(!os(libc::EINTR).private_wait_should_abort());
-        assert!(!os(libc::ESHUTDOWN).private_wait_should_abort());
-        assert!(os(libc::EIO).private_wait_should_abort());
+        assert!(!os(linux_errno::EINVAL).private_wait_should_abort());
+        assert!(!os(linux_errno::EAGAIN).private_wait_should_abort());
+        assert!(!os(linux_errno::EINTR).private_wait_should_abort());
+        assert!(!os(linux_errno::ESHUTDOWN).private_wait_should_abort());
+        assert!(os(linux_errno::EIO).private_wait_should_abort());
         assert!(
             !HomaError::RpcFailed {
                 id: RpcId::from_raw(2),
                 completion_cookie: 0,
-                source: io::Error::from_raw_os_error(libc::ETIMEDOUT),
+                source: io::Error::from_raw_os_error(linux_errno::ETIMEDOUT),
                 detail: None,
             }
             .private_wait_should_abort()
@@ -371,17 +426,43 @@ mod tests {
 
     #[test]
     fn recoverability() {
-        assert!(os("recvmsg", libc::ENOMEM).is_recoverable());
-        assert!(!os("recvmsg", libc::ESHUTDOWN).is_recoverable());
-        assert!(!os("socket", libc::EPROTONOSUPPORT).is_recoverable());
+        assert!(os("recvmsg", linux_errno::ENOMEM).is_recoverable());
+        assert!(!os("recvmsg", linux_errno::ESHUTDOWN).is_recoverable());
+        assert!(!os("socket", linux_errno::EPROTONOSUPPORT).is_recoverable());
         assert!(HomaError::Timeout(std::time::Duration::from_secs(1)).is_recoverable());
     }
 
     #[test]
     fn converts_to_io_error() {
-        let io: io::Error = os("bind", libc::EADDRINUSE).into();
-        assert_eq!(io.raw_os_error(), Some(libc::EADDRINUSE));
+        let io: io::Error = os("bind", linux_errno::EADDRINUSE).into();
+        assert_eq!(io.raw_os_error(), Some(linux_errno::EADDRINUSE));
         let io: io::Error = HomaError::EmptyMessage.into();
         assert_eq!(io.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    /// The numbers above are the Linux ones the kernel actually returns.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_errno_matches_libc() {
+        assert_eq!(linux_errno::EPERM, libc::EPERM);
+        assert_eq!(linux_errno::EINTR, libc::EINTR);
+        assert_eq!(linux_errno::EIO, libc::EIO);
+        assert_eq!(linux_errno::EBADF, libc::EBADF);
+        assert_eq!(linux_errno::EAGAIN, libc::EAGAIN);
+        assert_eq!(linux_errno::ENOMEM, libc::ENOMEM);
+        assert_eq!(linux_errno::EACCES, libc::EACCES);
+        assert_eq!(linux_errno::EFAULT, libc::EFAULT);
+        assert_eq!(linux_errno::EINVAL, libc::EINVAL);
+        assert_eq!(linux_errno::ENOPROTOOPT, libc::ENOPROTOOPT);
+        assert_eq!(linux_errno::EPROTONOSUPPORT, libc::EPROTONOSUPPORT);
+        assert_eq!(linux_errno::ESOCKTNOSUPPORT, libc::ESOCKTNOSUPPORT);
+        assert_eq!(linux_errno::EAFNOSUPPORT, libc::EAFNOSUPPORT);
+        assert_eq!(linux_errno::EADDRINUSE, libc::EADDRINUSE);
+        assert_eq!(linux_errno::ENETUNREACH, libc::ENETUNREACH);
+        assert_eq!(linux_errno::ENOBUFS, libc::ENOBUFS);
+        assert_eq!(linux_errno::ENOTCONN, libc::ENOTCONN);
+        assert_eq!(linux_errno::ESHUTDOWN, libc::ESHUTDOWN);
+        assert_eq!(linux_errno::ETIMEDOUT, libc::ETIMEDOUT);
+        assert_eq!(linux_errno::EHOSTUNREACH, libc::EHOSTUNREACH);
     }
 }

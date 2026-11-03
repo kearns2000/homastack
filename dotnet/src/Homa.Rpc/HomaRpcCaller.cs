@@ -28,7 +28,8 @@ public interface IRpcCaller
 /// </summary>
 /// <remarks>
 /// <see cref="Open"/> creates a Homa socket and needs Linux with <c>homa.ko</c>.
-/// That path has not been executed in this repository.
+/// That path has been executed on the custom WSL2 kernel recorded in
+/// <c>tests/integration/README.md</c>.
 /// </remarks>
 public sealed class HomaRpcCaller : IRpcCaller, IDisposable, IAsyncDisposable
 {
