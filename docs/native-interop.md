@@ -5,8 +5,11 @@
 Everything in this section was cross-checked line by line against the pinned
 HomaModule revision (`homa.h`, `homa_plumbing.c`, `homa_pool.c`,
 `homa_incoming.c`, `homa_sock.c`) and the struct layouts are enforced by
-compile-time assertions and the optional `header-check` C probe. It has **not**
-yet been exercised against a running kernel; see `tests/integration/README.md`.
+compile-time assertions and the optional `header-check` C probe. `homa-rs` and
+`homa-ffi` have since been run once against a loaded module; that module was
+the pinned tree plus a local `recvmsg` change that is not in this repository.
+See `tests/integration/README.md`. `Homa.KernelSmoke` has passed once on
+`lima-homa` (kernel `6.17.0-40-generic`, unmodified pin).
 
 Source of truth: `homa.h`, `homa_plumbing.c`, `homa_sock.c`, `homa_pool.c`,
 `homa_receiver.{h,cc}`, `util/demo_client1.cc`, `util/demo_server1.cc` and the
@@ -241,4 +244,5 @@ default `homa_ffi` probe. Non-Linux builds of the native library return
 `HOMA_ERR_UNSUPPORTED_PLATFORM`. Linux without `homa.ko` returns
 `HOMA_ERR_UNAVAILABLE`. Managed tests cover layout, argument checks, ABI
 version 1 and that failed open. `Homa.Rpc` tests drive an in-memory caller and
-do not open a socket. Neither suite has exchanged an RPC.
+do not open a socket. `Homa.KernelSmoke` has exchanged one transport RPC and
+one `Homa.Rpc` call on `lima-homa`.

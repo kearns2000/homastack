@@ -25,7 +25,9 @@ public static class HomaRpcServiceCollectionExtensions
     /// <summary>
     /// Registers <see cref="HomaRpcServerHostedService"/>. <see cref="Microsoft.Extensions.Hosting.IHostedService.StartAsync"/>
     /// calls <see cref="HomaRpcServer.Bind"/> and <see cref="HomaRpcServer.RunAsync"/>, which need Linux with <c>homa.ko</c>.
-    /// Those calls have been executed on the custom WSL2 kernel recorded in <c>tests/integration/README.md</c>.
+    /// Those two calls have passed once inside <c>Homa.KernelSmoke</c> (see
+    /// <c>tests/integration/results/20261110T224800Z-lima-homa.log</c>). This hosted
+    /// service itself was not the process that ran.
     /// </summary>
     public static IServiceCollection AddHomaRpcServer(this IServiceCollection services, IPEndPoint listen, Homa.HomaSocketOptions? socketOptions = null)
     {

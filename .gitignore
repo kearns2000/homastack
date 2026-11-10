@@ -12,6 +12,7 @@ dotnet/**/obj/
 .upstream/
 
 # Editors / OS
+.vs/
 .vscode/
 .idea/
 .DS_Store

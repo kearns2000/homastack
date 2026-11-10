@@ -42,10 +42,11 @@ If `HOMA_FFI_PATH` is unset, the `Homa.NET` test run looks under
 On macOS, `HomaSocket.Open` throws `HomaException` with status
 `UnsupportedPlatform`. On Linux without the module it throws `Unavailable`.
 A successful open, and any RPC on a real socket, still requires Linux with
-`homa.ko`. That path has been executed once on the custom WSL2 kernel recorded
-in `tests/integration/README.md`: `HomaSocket.Bind`, `HomaSocket.Open`, a
-request/reply, `HomaRpcServer.Bind`, and `HomaRpcClient.CallAsync`. Hosted
-`StartAsync` calls that same `Bind` and `RunAsync`.
+`homa.ko`. `dotnet test` does not do that. `dotnet/tests/Homa.KernelSmoke`
+does. It has passed once on `lima-homa` (kernel `6.17.0-40-generic`, arm64,
+unmodified HomaModule `4bd0275`): `ping` / `pong:ping`, then `echo` of `hello`
+returned `rpc:hello`. The output is in
+`tests/integration/results/20261110T224800Z-lima-homa.log`.
 
 ## Transport
 

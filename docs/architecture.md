@@ -50,13 +50,13 @@ Phase 2 C ABI. `Homa.Rpc` calls `Homa.NET` and does not add native symbols.
 
 `homa-sys`, `homa-rs`, the echo examples, `homa-ffi` (ABI version 1, plus the
 C `ffi-client` example), `Homa.NET`, `Homa.Rpc` and `Homa.Rpc.Hosting` are
-implemented. Kernel interoperability of `homa-rs`, `homa-ffi`, `Homa.NET`,
-and `Homa.Rpc` has been executed on one custom WSL2 kernel (see
-`tests/integration/README.md`). The `Homa.NET` tests check layout, arguments
-and a failed open. The `Homa.Rpc` tests check framing, dispatch, middleware,
-cancellation and DI in memory. Those tests do not open a socket. Hosted
-`StartAsync` calls `HomaRpcServer.Bind` and `RunAsync`, which were executed
-in the .NET run recorded there.
+implemented. Kernel interoperability of `homa-rs` and `homa-ffi` has been
+executed on one custom WSL2 kernel whose module includes a local `recvmsg`
+patch that is not in this repository, and on `lima-homa` where the pin built
+unmodified (see `tests/integration/README.md`). The `Homa.NET` tests check
+layout, arguments and a failed open. The `Homa.Rpc` tests check framing,
+dispatch, middleware, cancellation and DI in memory. Those tests do not open
+a socket. `Homa.KernelSmoke` does, and it has passed once on `lima-homa`.
 
 ### Integration flow
 
@@ -167,9 +167,9 @@ for the call (`RpcContext.GetRequestServices`), and hosts the server.
 `StartAsync` binds by calling `HomaRpcServer.Bind` and then starts `RunAsync`.
 Diagnostics use `ActivitySource` `Homa.Rpc` and `RpcMetrics`.
 
-`HomaRpcCaller.Open`, `HomaRpcServer.Bind`, `RunAsync`, and a `Homa.Rpc` call
-have been executed on the custom WSL2 kernel recorded in
-`tests/integration/README.md`.
+`HomaRpcCaller.Open`, `HomaRpcServer.Bind`, and `RunAsync` need `homa.ko`.
+`dotnet/tests/Homa.KernelSmoke` calls them. That program has passed once on
+`lima-homa`; the log is `tests/integration/results/20261110T224800Z-lima-homa.log`.
 
 ## Message flow
 

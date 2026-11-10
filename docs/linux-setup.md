@@ -10,7 +10,7 @@ the pinned revision.
 | Environment | Works? | Notes |
 |-------------|--------|-------|
 | Bare-metal Linux, your own kernel | yes | upstream `main` is tested on 6.17.8; RHEL 8 / 9.5 have their own branches |
-| Linux VM (KVM, VMware, Hyper-V, cloud VM) | yes | you must be able to build/load modules; loopback tests need one VM, real latency needs two + a switch |
+| Linux VM (KVM, VMware, Hyper-V, Lima, cloud VM) | yes | you must be able to build/load modules; loopback tests need one VM, real latency needs two + a switch. A Lima guest on Apple Silicon (Ubuntu 25.10, kernel `6.17.0-40-generic`) loaded the unmodified pin and `Homa.KernelSmoke` passed |
 | WSL2 | not with the stock kernel | A custom kernel can load the module. On 6.18 the pinned HomaModule tree needs a local `recvmsg` change in `homa_plumbing.c` (its adapter is gated at 7.1). That change is not in this repository. Loopback tests passed once on `6.18.54.1-microsoft-standard-WSL2+`. This remains outside the supported setup. |
 | Docker / Podman | only if the **host** kernel has Homa | containers cannot `insmod`; the socket probe may also be blocked by seccomp |
 | Kubernetes / managed PaaS (App Service, Cloud Run, …) | no | no control over the kernel |

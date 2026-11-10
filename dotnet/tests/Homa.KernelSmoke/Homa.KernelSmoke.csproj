@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Homa.KernelSmoke</RootNamespace>
+    <AssemblyName>Homa.KernelSmoke</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Manual Homa.NET and Homa.Rpc loopback smoke. Not run by dotnet test.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Homa.Rpc/Homa.Rpc.csproj" />
+  </ItemGroup>
+</Project>

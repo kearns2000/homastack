@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" alt=".NET 10">
   <img src="https://img.shields.io/badge/platform-Linux%20%2B%20homa.ko-FCC624?logo=linux&logoColor=black" alt="Platform: Linux with homa kernel module">
   <a href="https://github.com/PlatformLab/HomaModule/tree/4bd0275714439da2955670a6c438f6c23304d785"><img src="https://img.shields.io/badge/HomaModule-4bd0275-1f6feb" alt="Pinned HomaModule revision 4bd0275"></a>
-  <a href="tests/integration/README.md"><img src="https://img.shields.io/badge/kernel%20interop-passed%20on%20WSL%206.18-2ea44f" alt="Kernel interop passed on WSL 6.18"></a>
+  <a href="tests/integration/README.md"><img src="https://img.shields.io/badge/kernel%20interop-.NET%20smoke%20passed%20on%206.17-2ea44f" alt="Kernel interop: .NET smoke passed on Linux 6.17"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue" alt="Licence: MIT"></a>
 </p>
 
@@ -61,10 +61,11 @@ asynchronous. Payloads are copied once out of the kernel-managed region into a
 > passed on a custom WSL2 kernel, `6.18.54.1-microsoft-standard-WSL2+`, with
 > `homa.ko` loaded: 10 `homa-rs` tests, 8 `homa-ffi` tests, and both header
 > checks. The module was HomaModule `4bd0275` plus a local `recvmsg` change
-> required by Linux 6.18; that change is not in this repository. On that same
-> host a .NET 10 process loaded `libhoma_ffi.so`, bound a socket, and
-> completed a transport request and a `Homa.Rpc` call. See
-> [tests/integration/README.md](tests/integration/README.md).
+> required by Linux 6.18; that change is not in this repository, so the pinned
+> tree alone does not reproduce that WSL run. On a later Lima guest, kernel
+> `6.17.0-40-generic` (arm64), the unmodified pin loaded and `Homa.KernelSmoke`
+> passed: `ping` / `pong:ping`, then `echo` of `hello` returned `rpc:hello`.
+> See [tests/integration/README.md](tests/integration/README.md).
 
 ## Dependency on the Linux kernel module
 
@@ -203,16 +204,17 @@ cmake --build /tmp/ffi-client-build
 | `cargo test -p homa-ffi --features header-check` | no (`cc`) | compiles `homa_ffi.h` as C11 and compares sizes, offsets and constants with the Rust `#[repr(C)]` types |
 | `cargo test -p homa-rs --test kernel_integration -- --ignored --test-threads=1` | **yes** | small RPC, binary payload with NULs, 300 KB / 1 MB multi-page payloads, 200 sequential requests with buffer recycling, completion cookies & shared vs private responses, concurrent requests, no-server and unreachable destinations, receive timeout and shutdown wake-up, cleanup after failures |
 | `cargo test -p homa-ffi --test ffi_kernel -- --ignored --test-threads=1` | **yes** | C ABI against a live module: request/reply, NULs, large payloads, sequential and concurrent RPCs, Rust server + FFI client, timeout/shutdown, handle close |
-| `scripts/run-integration.sh` | **yes** | runs the header checks and both ignored kernel suites and writes a log under `tests/integration/results/` |
+| `scripts/run-integration.sh` | **yes** | header checks, both ignored kernel suites, then `Homa.KernelSmoke`, logged under `tests/integration/results/` |
+| `dotnet run --project dotnet/tests/Homa.KernelSmoke -c Release` | **yes** | one transport `ping` / `pong:ping` and one `Homa.Rpc` `echo` of `hello` (`rpc:hello`). Not started by `dotnet test`. Passed once on `lima-homa` (see the integration log). |
 | `dotnet test dotnet/HomaStack.slnx` | no | `Homa.NET`: struct layout, argument checks, ABI version and status names against `libhoma_ffi`. `Open` returns unsupported platform or unavailable without `homa.ko`. `Homa.Rpc`: frame, dispatch, middleware, cancellation and DI, all in memory with no socket. Set `HOMA_FFI_PATH` if the library is not under `rust/target`. |
 
 `cargo test` never fails just because Homa is absent: the kernel suites are
-`#[ignore]`d and are never mocked. `dotnet test` does not exchange an RPC.
-Rust and C ABI kernel interoperability has been executed once, and a .NET 10
-process on that same host has bound a socket and completed a `Homa.Rpc` call.
-See [tests/integration/README.md](tests/integration/README.md). The hosted
-service's `StartAsync` calls `HomaRpcServer.Bind` and `RunAsync`, which were
-the calls that ran.
+`#[ignore]`d and are never mocked. `dotnet test` does not open a socket and
+does not exchange an RPC. Rust and C ABI kernel interoperability has been
+executed once on WSL2, against a module that includes a local `recvmsg`
+patch which is not in this repository. `Homa.KernelSmoke` has since passed
+on `lima-homa` (Ubuntu 25.10, kernel `6.17.0-40-generic`, arm64) against the
+unmodified pin. See [tests/integration/README.md](tests/integration/README.md).
 
 ## Known limitations
 
@@ -231,7 +233,7 @@ the calls that ran.
 - ioctl numbers are encoded for the asm-generic layout (x86, arm64, riscv, …);
   the crate refuses to build on powerpc/mips/sparc until that encoding is added.
 - `Homa.Rpc` uses those same thread-pool waits. Its unit tests call an in-memory transport and do not open a socket.
-- Rust, C ABI, and .NET socket interoperability has been executed on one custom WSL2 kernel (see [tests/integration/README.md](tests/integration/README.md)). Hosted `StartAsync` is that same `HomaRpcServer.Bind` and `RunAsync`.
+- Rust and C ABI kernel interoperability has been executed on WSL2 with a local `recvmsg` patch that is not in this repository, and again on `lima-homa` where 8 `homa-ffi` tests passed and 9 of 10 `homa-rs` tests passed. `Homa.KernelSmoke` passed on that guest (see [tests/integration/README.md](tests/integration/README.md)).
 
 ## Upstream projects, revisions and licences
 
@@ -257,10 +259,11 @@ is `rust/crates/homa-ffi/include/homa_ffi.h`; the Linux shared library is
 [docs/native-interop.md](docs/native-interop.md) for every exported function,
 ownership rules, error codes, and the .NET `LibraryImport` mapping.
 
-Kernel interoperability of this layer has been executed on the same host as
-Phase 1 (see [tests/integration/README.md](tests/integration/README.md)). The
-`examples/ffi-client` binary was not built in that run; the `homa-ffi` kernel
-tests cover the exported C ABI.
+Kernel interoperability of this layer has been executed once, on the same host
+as Phase 1, against HomaModule `4bd0275` plus a local `recvmsg` patch that is
+not in this repository (see [tests/integration/README.md](tests/integration/README.md)).
+The `examples/ffi-client` binary was not built in that run; the `homa-ffi`
+kernel tests cover the exported C ABI.
 
 ## Phase 3: managed Homa.NET
 
@@ -295,9 +298,9 @@ using var response = client.Request(
 On a machine without `homa.ko` the tests check layout, argument validation,
 ABI version 1 and a failed `Open` (`UnsupportedPlatform` on Windows and macOS,
 `Unavailable` on Linux without the module). Rust and C ABI RPCs use the
-ignored kernel tests, which have been run once (see the integration log).
-On that same host a .NET 10 process has opened a socket and completed a
-`Homa.Rpc` call. Hosted `StartAsync` is that same bind and receive loop.
+ignored kernel tests. `Homa.KernelSmoke` has passed once on `lima-homa`: a
+socket `ping` / `pong:ping` and a `Homa.Rpc` echo of `hello` (see the
+integration log). `dotnet test` does not open a socket.
 
 ## Phase 4: Homa.Rpc
 
@@ -331,9 +334,12 @@ await using var server = HomaRpcServer.Bind(
     new IPEndPoint(IPAddress.Any, 4000), pipeline);
 ```
 
-`Bind` and `HomaRpcCaller.Open` need Linux with `homa.ko`. The tests never call
-them: they pass an in-memory `IRpcCaller` into `HomaRpcClient` and dispatch
-frames on `RpcPipeline` directly. No RPC has been exchanged through the kernel.
+`Bind` and `HomaRpcCaller.Open` need Linux with `homa.ko`. `dotnet test` never
+calls them: it passes an in-memory `IRpcCaller` into `HomaRpcClient` and
+dispatches frames on `RpcPipeline` directly. `dotnet/tests/Homa.KernelSmoke`
+does exchange a `ping` / `pong:ping` and an `echo` of `hello` (`rpc:hello`).
+That program has passed once; the output is in
+[tests/integration/results/20261110T224800Z-lima-homa.log](tests/integration/results/20261110T224800Z-lima-homa.log).
 
 A userspace Homa transport, without `homa.ko`, is still future work.
 Details of the native contract underneath this layer are in

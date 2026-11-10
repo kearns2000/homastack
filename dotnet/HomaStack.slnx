@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Homa.NET.Tests/Homa.NET.Tests.csproj" />
     <Project Path="tests/Homa.Rpc.Tests/Homa.Rpc.Tests.csproj" />
+    <Project Path="tests/Homa.KernelSmoke/Homa.KernelSmoke.csproj" />
   </Folder>
 </Solution>

@@ -14,9 +14,9 @@ namespace Homa;
 /// Sockets exist on Linux when the <c>homa</c> kernel module is loaded.
 /// Elsewhere <see cref="Open"/> fails with
 /// <see cref="HomaStatus.UnsupportedPlatform"/>. Linux without the module
-/// fails with <see cref="HomaStatus.Unavailable"/>. A live request and reply
-/// through this wrapper has been executed on the custom WSL2 kernel recorded in
-/// <c>tests/integration/README.md</c>.
+/// fails with <see cref="HomaStatus.Unavailable"/>. <c>Homa.KernelSmoke</c>
+/// has completed one request and reply on <c>lima-homa</c>; the log is
+/// <c>tests/integration/results/20261110T224800Z-lima-homa.log</c>.
 /// </para>
 /// <para>
 /// <see cref="RequestAsync"/> and <see cref="RecvResponseAsync"/> block a

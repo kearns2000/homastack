@@ -1,0 +1,19 @@
+# HomaStack .NET kernel smoke
+date_utc: 20261110T224800Z
+host: lima-homa
+kernel: 6.17.0-40-generic (aarch64)
+homa_module: 1.0
+homa_module_source: PlatformLab/HomaModule 4bd0275714439da2955670a6c438f6c23304d785
+homa_module_patch: none (built on this 6.17 kernel as pinned)
+dotnet: 10.0.404
+rustc: rustc 1.92.0 (ded5c06cf 2025-12-08)
+git: be71e3c
+note: the guest ran the working tree. Homa.KernelSmoke was not in be71e3c yet.
+command: ~/homa-smoke.sh
+program: dotnet run --project dotnet/tests/Homa.KernelSmoke -c Release
+library: guest-built release libhoma_ffi.so (HOMA_FFI_PATH)
+
+transport: ping -> pong:ping
+rpc: echo hello -> rpc:hello
+
+dotnet_smoke_exit: 0
